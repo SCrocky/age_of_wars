@@ -63,34 +63,29 @@ class ResourceNode:
 
 class GoldNode(ResourceNode):
     resource_type = "gold"
-    max_amount    = 300
-    DISPLAY_SIZE  = 96    # world px
+    FRAME_W       = 128
+    DISPLAY_SIZE  = 96
 
-    def __init__(self, x: float, y: float):
+    def __init__(self, x: float, y: float, variant: int = 1):
+        self.max_amount = variant * 100
         super().__init__(x, y)
-        self._surf = pygame.image.load(
-            "assets/Terrain/Resources/Gold/Gold Resource/Gold_Resource.png"
-        ).convert_alpha()
+        n = max(1, min(6, variant))
+        self._frames = _load_sheet(
+            f"assets/Terrain/Resources/Gold/Gold Stones/Gold Stone {n}_Highlight.png",
+            self.FRAME_W,
+        )
+
+    def _frame_count(self) -> int:
+        return len(self._frames)
 
     def render(self, surface: pygame.Surface, camera):
         if self.depleted:
             return
+        frame = self._frames[self._frame_idx % len(self._frames)]
         size = max(1, int(self.DISPLAY_SIZE * camera.zoom))
-        scaled = pygame.transform.scale(self._surf, (size, size))
+        scaled = pygame.transform.scale(frame, (size, size))
         sx, sy = camera.world_to_screen(self.x, self.y)
         surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
-        self._draw_amount_bar(surface, camera)
-
-    def _draw_amount_bar(self, surface, camera):
-        sx, sy = camera.world_to_screen(self.x, self.y)
-        bw = int(50 * camera.zoom)
-        bh = max(3, int(4 * camera.zoom))
-        bx = int(sx - bw / 2)
-        by = int(sy - self.DISPLAY_SIZE * camera.zoom / 2 - bh - 2)
-        pygame.draw.rect(surface, (60, 60, 0),   (bx, by, bw, bh))
-        fill = int(bw * self.amount / self.max_amount)
-        pygame.draw.rect(surface, (220, 180, 0), (bx, by, fill, bh))
-        pygame.draw.rect(surface, (0, 0, 0),     (bx, by, bw, bh), 1)
 
 
 class WoodNode(ResourceNode):

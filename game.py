@@ -97,7 +97,7 @@ class Game:
 
         for _ in range(5):
             x, y = rand_grass_pos()
-            self.resources.append(GoldNode(x, y))
+            self.resources.append(GoldNode(x, y, variant=rng.randint(1, 6)))
         for i in range(6):
             x, y = rand_grass_pos()
             self.resources.append(WoodNode(x, y, variant=i))
