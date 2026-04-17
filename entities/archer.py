@@ -1,0 +1,136 @@
+import math
+import pygame
+from entities.unit import Unit
+from entities.projectile import Arrow, ARROW_DAMAGE
+
+ANIM_FPS = 8
+
+
+def _load_sheet(path: str, frame_size: int) -> list[pygame.Surface]:
+    sheet = pygame.image.load(path).convert_alpha()
+    count = sheet.get_width() // frame_size
+    return [
+        sheet.subsurface(pygame.Rect(i * frame_size, 0, frame_size, frame_size))
+        for i in range(count)
+    ]
+
+
+class Archer(Unit):
+    """Ranged combat unit."""
+
+    FRAME_SIZE      = 192
+    DISPLAY_SIZE    = 96
+    ATTACK_RANGE    = 200.0
+    ATTACK_COOLDOWN = 1.5
+    SHOOT_DELAY     = 0.4
+
+    def __init__(self, x: float, y: float, team: str = "blue"):
+        super().__init__(x, y, team, max_hp=80)
+
+        folder = f"assets/Units/{team.capitalize()} Units/Archer"
+        self._frames = {
+            "idle":   _load_sheet(f"{folder}/Archer_Idle.png",  self.FRAME_SIZE),
+            "run":    _load_sheet(f"{folder}/Archer_Run.png",   self.FRAME_SIZE),
+            "attack": _load_sheet(f"{folder}/Archer_Shoot.png", self.FRAME_SIZE),
+        }
+
+        self._state:       str   = "idle"
+        self._frame_idx:   int   = 0
+        self._anim_timer:  float = 0.0
+
+        self.attack_range:   float = self.ATTACK_RANGE
+        self._shoot_timer:   float = 0.0
+        self._arrow_spawned: bool  = False
+
+    # ------------------------------------------------------------------
+    # Update  →  returns list of Arrow objects to be added to the world
+    # ------------------------------------------------------------------
+
+    def update(self, dt: float, tile_map=None) -> list[Arrow]:
+        spawned: list[Arrow] = []
+
+        self._attack_cooldown = max(0.0, self._attack_cooldown - dt)
+
+        if self.attack_target is not None:
+            if not self.attack_target.alive:
+                self.attack_target = None
+            else:
+                if self._dist_to_target() <= self.attack_range:
+                    self.path = []
+                    self._state = "attack"
+                    arrow = self._tick_attack(dt)
+                    if arrow:
+                        spawned.append(arrow)
+                else:
+                    self._state         = "run"
+                    self._shoot_timer   = 0.0
+                    self._arrow_spawned = False
+                    if tile_map is not None:
+                        self._chase_timer -= dt
+                        if self._chase_timer <= 0:
+                            self._chase_timer = self.CHASE_INTERVAL
+                            self._repath_to_target(tile_map)
+                    self._move_along_path(dt)
+
+        elif self.path:
+            self._state = "run"
+            self._move_along_path(dt)
+        else:
+            self._state = "idle"
+
+        self._tick_animation(dt)
+        return spawned
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _tick_attack(self, dt: float):
+        if self._attack_cooldown > 0:
+            return None
+
+        tx, _ = self.attack_target.closest_point(self.x, self.y)
+        dx = tx - self.x
+        if abs(dx) > 1:
+            self._facing_right = dx > 0
+
+        self._shoot_timer += dt
+
+        if not self._arrow_spawned and self._shoot_timer >= self.SHOOT_DELAY:
+            self._arrow_spawned   = True
+            self._attack_cooldown = self.ATTACK_COOLDOWN
+            self._shoot_timer     = 0.0
+            self._arrow_spawned   = False
+            self._frame_idx       = 0
+            return Arrow(self.x, self.y, self.attack_target, ARROW_DAMAGE, self.team)
+
+        return None
+
+    def _tick_animation(self, dt: float):
+        self._anim_timer += dt
+        if self._anim_timer >= 1.0 / ANIM_FPS:
+            self._anim_timer -= 1.0 / ANIM_FPS
+            frames = self._frames[self._state]
+            self._frame_idx = (self._frame_idx + 1) % len(frames)
+
+    # ------------------------------------------------------------------
+    # Render
+    # ------------------------------------------------------------------
+
+    def render(self, surface: pygame.Surface, camera):
+        frames = self._frames[self._state]
+        frame  = frames[self._frame_idx % len(frames)]
+
+        size   = max(1, int(self.DISPLAY_SIZE * camera.zoom))
+        scaled = pygame.transform.scale(frame, (size, size))
+        if not self._facing_right:
+            scaled = pygame.transform.flip(scaled, True, False)
+
+        sx, sy = camera.world_to_screen(self.x, self.y)
+        surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
+
+        if self.selected:
+            r = max(2, int(20 * camera.zoom))
+            pygame.draw.circle(surface, (255, 220, 0), (int(sx), int(sy)), r, 2)
+
+        self.draw_health_bar(surface, camera)

@@ -1,3 +1,4 @@
+import math
 import pygame
 import random
 
@@ -133,6 +134,23 @@ class TileMap:
                 col, row = cx + dc, cy + dr
                 if 0 <= col < self.cols and 0 <= row < self.rows:
                     self.blocked.add((col, row))
+
+    def nearest_walkable(self, col: int, row: int) -> tuple[int, int]:
+        """Return the walkable tile closest to (col, row) by Euclidean distance."""
+        if self.is_walkable(col, row):
+            return col, row
+        for r in range(1, 8):
+            candidates = [
+                (math.hypot(dc, dr), col + dc, row + dr)
+                for dc in range(-r, r + 1)
+                for dr in range(-r, r + 1)
+                if (abs(dc) == r or abs(dr) == r)
+                and self.is_walkable(col + dc, row + dr)
+            ]
+            if candidates:
+                _, c, ro = min(candidates)
+                return c, ro
+        return col, row
 
     def block_tiles(self, world_x: float, world_y: float, offsets: list[tuple[int, int]]):
         """Mark specific tile offsets (dc, dr) relative to a world position as unwalkable."""

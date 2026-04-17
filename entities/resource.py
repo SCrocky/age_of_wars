@@ -31,6 +31,10 @@ class ResourceNode:
     def depleted(self) -> bool:
         return self.amount <= 0
 
+    @property
+    def sort_y(self) -> float:
+        return self.y
+
     def gather(self, amount: int) -> int:
         """Remove up to `amount` from this node; returns what was actually taken."""
         taken = min(amount, self.amount)

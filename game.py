@@ -3,10 +3,10 @@ import random
 import pygame
 from camera import Camera
 from map import TileMap, TILE_SIZE
-from entities.unit import Archer
+from entities.archer import Archer
 from entities.lancer import Lancer
 from entities.pawn import Pawn
-from entities.building import Castle
+from entities.building import Building, Castle
 from entities.resource import GoldNode, WoodNode, MeatNode
 from entities.projectile import Arrow
 from systems.pathfinding import astar
@@ -33,7 +33,7 @@ class Game:
         self.units: list = []
         self.pawns: list[Pawn] = []
         self.arrows: list[Arrow] = []
-        self.buildings: list[Castle] = []
+        self.buildings: list[Building] = []
         self.resources: list = []
 
         # Economy: resource counts per team
@@ -61,10 +61,8 @@ class Game:
         black_castle = Castle(cx + 400, cy, team="black")
         self.buildings = [blue_castle, black_castle]
 
-        # Clear water then block the castle footprint so units can't walk through it
         for castle in self.buildings:
             self.map.clear_area(castle.x, castle.y, tile_radius=6)
-            self.map.block_area(castle.x, castle.y, half_w=2, half_h=1)
 
         # --- Player combat units (spawned to the right of the blue castle) ---
         for dx, dy in [(-100, -80), (-20, -80), (60, -80)]:
@@ -112,7 +110,7 @@ class Game:
     # ------------------------------------------------------------------
 
     def _all_selectable(self):
-        return self.units + self.pawns
+        return self.units + self.pawns + self.buildings
 
     # ------------------------------------------------------------------
     # Event handling
@@ -196,12 +194,12 @@ class Game:
         selected_combat = [u for u in self.units if u.selected]
         selected_pawns = [p for p in self.pawns if p.selected]
 
-        # Right-click on enemy → attack (combat units only)
+        # Right-click on enemy unit or building → attack (combat units only)
         enemy = next(
             (
-                u
-                for u in self.units
-                if u.team != "blue" and u.hit_test(sx, sy, self.camera)
+                e
+                for e in self.units + self.buildings
+                if e.team != "blue" and e.hit_test(sx, sy, self.camera)
             ),
             None,
         )
@@ -211,7 +209,7 @@ class Game:
             return
 
         # Right-click on a resource node → gather (pawns only)
-        friendly_depots = [b for b in self.buildings if b.team == "blue"]
+        friendly_depots = [b for b in self.buildings if b.team == "blue" and b.alive]
         if friendly_depots and selected_pawns:
             resource = next(
                 (
@@ -276,10 +274,28 @@ class Game:
             res.update(dt)
 
         self._apply_separation(dt)
+        self._apply_building_collision()
 
         self.units = [u for u in self.units if u.alive]
         self.pawns = [p for p in self.pawns if p.alive]
         self.arrows = [a for a in self.arrows if a.alive]
+        self.buildings = [b for b in self.buildings if b.alive]
+
+    def _apply_building_collision(self):
+        for unit in self.units + self.pawns:
+            r = unit.DISPLAY_SIZE / 4
+            for building in self.buildings:
+                hw = building.COLLISION_W / 2 + r
+                hh = building.COLLISION_H / 2 + r
+                dx = unit.x - building.x
+                dy = unit.y - building.y
+                ox = hw - abs(dx)
+                oy = hh - abs(dy)
+                if ox > 0 and oy > 0:
+                    if ox <= oy:
+                        unit.x += ox * (1 if dx >= 0 else -1)
+                    else:
+                        unit.y += oy * (1 if dy >= 0 else -1)
 
     def _apply_separation(self, dt: float):
         RADIUS = 40.0
@@ -314,7 +330,7 @@ class Game:
 
         # Y-sort all world objects so lower objects draw on top (painter's algorithm)
         world_objects = self.resources + self.buildings + self.units + self.pawns
-        world_objects.sort(key=lambda obj: obj.y)
+        world_objects.sort(key=lambda obj: obj.sort_y)
         for obj in world_objects:
             obj.render(self.screen, self.camera)
 
@@ -401,11 +417,9 @@ class Game:
             surf = font.render(label, True, (255, 255, 100))
             self.screen.blit(surf, (int(px) - surf.get_width() // 2, int(py) - 55))
 
-            # Depot deposit radius rings
-            for depot in pawn._depots:
-                dx, dy = self.camera.world_to_screen(depot.x, depot.y)
-                r = int(depot.DEPOSIT_RADIUS * self.camera.zoom)
-                pygame.draw.circle(self.screen, (255, 120, 0), (int(dx), int(dy)), r, 1)
+            # Deposit radius ring on the pawn
+            r = int(pawn.DEPOSIT_RADIUS * self.camera.zoom)
+            pygame.draw.circle(self.screen, (255, 120, 0), (int(px), int(py)), r, 1)
 
     def _draw_hud(self):
         eco = self.economy["blue"]

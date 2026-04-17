@@ -20,6 +20,13 @@ class Entity:
     def alive(self) -> bool:
         return self.hp > 0
 
+    @property
+    def sort_y(self) -> float:
+        return self.y
+
+    def closest_point(self, x: float, y: float) -> tuple[float, float]:
+        return self.x, self.y
+
     def receive_melee_hit(self, attacker):
         """Called when struck by a melee attack. Override to react (e.g. play defence animation)."""
         pass
