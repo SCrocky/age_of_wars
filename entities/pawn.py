@@ -138,9 +138,12 @@ class Pawn(Unit):
                     self._state = "idle"
             else:
                 self._gather_timer += dt
-                gained = self._resource_node.gather(int(GATHER_RATE * dt) or 1
-                                                    if self._gather_timer >= 1.0 / GATHER_RATE
-                                                    else 0)
+                gained = self._resource_node.gather(
+                    int(GATHER_RATE * dt) or 1
+                    if self._gather_timer >= 1.0 / GATHER_RATE
+                    else 0,
+                    gatherer=self,
+                )
                 if gained:
                     self._gather_timer = 0.0
                     self._carried = min(CARRY_MAX, self._carried + gained)
