@@ -35,6 +35,83 @@ class Building(Entity):
 # ---------------------------------------------------------------------------
 
 
+class Archery(Building):
+    DISPLAY_W   = 192
+    DISPLAY_H   = 192
+    COLLISION_W = 140
+    COLLISION_H = 100
+
+    def __init__(self, x: float, y: float, team: str):
+        super().__init__(x, y, team, max_hp=300)
+        path = f"assets/Buildings/{team.capitalize()} Buildings/Archery.png"
+        self._surf = pygame.image.load(path).convert_alpha()
+
+    def render(self, surface: pygame.Surface, camera):
+        if not self.alive:
+            return
+        w = max(1, int(self.DISPLAY_W * camera.zoom))
+        h = max(1, int(self.DISPLAY_H * camera.zoom))
+        scaled = pygame.transform.scale(self._surf, (w, h))
+        sx, sy = camera.world_to_screen(self.x, self.y)
+        surface.blit(scaled, (int(sx - w / 2), int(sy - h / 2)))
+        if self.selected:
+            pygame.draw.rect(surface, (255, 220, 0),
+                             (int(sx - w / 2), int(sy - h / 2), w, h), 2)
+        self.draw_health_bar(surface, camera, width=60)
+
+
+class Barracks(Building):
+    DISPLAY_W   = 192
+    DISPLAY_H   = 192
+    COLLISION_W = 140
+    COLLISION_H = 100
+
+    def __init__(self, x: float, y: float, team: str):
+        super().__init__(x, y, team, max_hp=350)
+        path = f"assets/Buildings/{team.capitalize()} Buildings/Barracks.png"
+        self._surf = pygame.image.load(path).convert_alpha()
+
+    def render(self, surface: pygame.Surface, camera):
+        if not self.alive:
+            return
+        w = max(1, int(self.DISPLAY_W * camera.zoom))
+        h = max(1, int(self.DISPLAY_H * camera.zoom))
+        scaled = pygame.transform.scale(self._surf, (w, h))
+        sx, sy = camera.world_to_screen(self.x, self.y)
+        surface.blit(scaled, (int(sx - w / 2), int(sy - h / 2)))
+        if self.selected:
+            pygame.draw.rect(surface, (255, 220, 0),
+                             (int(sx - w / 2), int(sy - h / 2), w, h), 2)
+        self.draw_health_bar(surface, camera, width=60)
+
+
+class House(Building):
+    DISPLAY_W   = 128
+    DISPLAY_H   = 128
+    COLLISION_W = 90
+    COLLISION_H = 70
+    POP_BONUS   = 5
+
+    def __init__(self, x: float, y: float, team: str, variant: int = 1):
+        super().__init__(x, y, team, max_hp=150)
+        n = max(1, min(3, variant))
+        path = f"assets/Buildings/{team.capitalize()} Buildings/House{n}.png"
+        self._surf = pygame.image.load(path).convert_alpha()
+
+    def render(self, surface: pygame.Surface, camera):
+        if not self.alive:
+            return
+        w = max(1, int(self.DISPLAY_W * camera.zoom))
+        h = max(1, int(self.DISPLAY_H * camera.zoom))
+        scaled = pygame.transform.scale(self._surf, (w, h))
+        sx, sy = camera.world_to_screen(self.x, self.y)
+        surface.blit(scaled, (int(sx - w / 2), int(sy - h / 2)))
+        if self.selected:
+            pygame.draw.rect(surface, (255, 220, 0),
+                             (int(sx - w / 2), int(sy - h / 2), w, h), 2)
+        self.draw_health_bar(surface, camera, width=50)
+
+
 class Castle(Building):
     DISPLAY_W   = 320
     DISPLAY_H   = 256

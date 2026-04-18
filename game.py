@@ -7,10 +7,11 @@ from entities.archer import Archer
 from entities.lancer import Lancer
 from entities.warrior import Warrior
 from entities.pawn import Pawn
-from entities.building import Building, Castle
+from entities.building import Building, Castle, Archery, Barracks, House
 from entities.resource import GoldNode, WoodNode, MeatNode
 from entities.projectile import Arrow
 from systems.pathfinding import astar
+from hud import HUD
 
 DRAG_THRESHOLD = 5
 
@@ -30,6 +31,7 @@ class Game:
         self.camera.y = (self.map.pixel_height - self.h) / 2
 
         self.font = pygame.font.SysFont(None, 22)
+        self.hud  = HUD(self.w, self.h)
 
         self.units: list = []
         self.pawns: list[Pawn] = []
@@ -39,8 +41,8 @@ class Game:
 
         # Economy: resource counts per team
         self.economy: dict[str, dict[str, int]] = {
-            "blue": {"gold": 0, "wood": 0, "meat": 0},
-            "black": {"gold": 0, "wood": 0, "meat": 0},
+            "blue":  {"gold": 0, "wood": 0, "meat": 0, "pop": 0, "pop_cap": 0},
+            "black": {"gold": 0, "wood": 0, "meat": 0, "pop": 0, "pop_cap": 0},
         }
 
         self._spawn_world()
@@ -58,12 +60,19 @@ class Game:
         cy = self.map.pixel_height // 2
 
         # --- Castles ---
-        blue_castle = Castle(cx - 400, cy, team="blue")
-        black_castle = Castle(cx + 400, cy, team="black")
-        self.buildings = [blue_castle, black_castle]
+        blue_castle   = Castle(cx - 400, cy, team="blue")
+        black_castle  = Castle(cx + 400, cy, team="black")
+        blue_archery  = Archery(cx - 220, cy + 160, team="blue")
+        blue_barracks = Barracks(cx - 570, cy + 150, team="blue")
+        blue_houses = [
+            House(cx - 620, cy - 130, team="blue", variant=1),
+            House(cx - 490, cy - 160, team="blue", variant=2),
+            House(cx - 360, cy - 150, team="blue", variant=3),
+        ]
+        self.buildings = [blue_castle, black_castle, blue_archery, blue_barracks] + blue_houses
 
-        for castle in self.buildings:
-            self.map.clear_area(castle.x, castle.y, tile_radius=6)
+        for b in self.buildings:
+            self.map.clear_area(b.x, b.y, tile_radius=4)
 
         # --- Player combat units (spawned to the right of the blue castle) ---
         for dx, dy in [(-100, -80), (-20, -80), (60, -80)]:
@@ -162,7 +171,17 @@ class Game:
                 if self._dragging:
                     self._handle_box_select(self._drag_start, event.pos)
                 else:
-                    self._handle_left_click(event.pos)
+                    action = self.hud.handle_click(*event.pos)
+                    if action == "spawn_pawn":
+                        self._handle_spawn_pawn()
+                    elif action == "spawn_archer":
+                        self._handle_spawn_archer()
+                    elif action == "spawn_lancer":
+                        self._handle_spawn_lancer()
+                    elif action == "spawn_warrior":
+                        self._handle_spawn_warrior()
+                    else:
+                        self._handle_left_click(event.pos)
                 self._drag_start = None
                 self._dragging = False
 
@@ -203,12 +222,91 @@ class Game:
         if not (mods & pygame.KMOD_SHIFT):
             for u in self._all_selectable():
                 u.selected = False
-        for u in self._all_selectable():
+        for u in self.units + self.pawns:
             if u.team != "blue":
                 continue
             ux, uy = self.camera.world_to_screen(u.x, u.y)
             if x1 <= ux <= x2 and y1 <= uy <= y2:
                 u.selected = True
+
+    def _handle_spawn_archer(self):
+        eco = self.economy["blue"]
+        if eco["wood"] < 15 or eco["meat"] < 30 or eco["pop"] >= eco["pop_cap"]:
+            return
+        archery = next(
+            (b for b in self.buildings if b.team == "blue"
+             and b.selected and b.alive and type(b).__name__ == "Archery"),
+            None,
+        )
+        if archery is None:
+            return
+        eco["wood"] -= 15
+        eco["meat"] -= 30
+        angle = random.uniform(0, 2 * math.pi)
+        self.units.append(Archer(
+            archery.x + math.cos(angle) * 120,
+            archery.y + math.sin(angle) * 120,
+            team="blue",
+        ))
+
+    def _handle_spawn_pawn(self):
+        eco = self.economy["blue"]
+        if eco["meat"] < 20 or eco["pop"] >= eco["pop_cap"]:
+            return
+        castle = next(
+            (b for b in self.buildings if b.team == "blue" and b.selected and b.alive),
+            None,
+        )
+        if castle is None:
+            return
+        eco["meat"] -= 20
+        import random
+        angle = random.uniform(0, 2 * math.pi)
+        dist  = 120
+        px    = castle.x + math.cos(angle) * dist
+        py    = castle.y + math.sin(angle) * dist
+        pawn  = Pawn(px, py, team="blue")
+        self.pawns.append(pawn)
+
+    def _handle_spawn_lancer(self):
+        eco = self.economy["blue"]
+        if eco["wood"] < 45 or eco["meat"] < 10 or eco["pop"] >= eco["pop_cap"]:
+            return
+        barracks = next(
+            (b for b in self.buildings if b.team == "blue"
+             and b.selected and b.alive and type(b).__name__ == "Barracks"),
+            None,
+        )
+        if barracks is None:
+            return
+        eco["wood"] -= 45
+        eco["meat"] -= 10
+        angle = random.uniform(0, 2 * math.pi)
+        self.units.append(Lancer(
+            barracks.x + math.cos(angle) * 120,
+            barracks.y + math.sin(angle) * 120,
+            team="blue",
+        ))
+
+    def _handle_spawn_warrior(self):
+        eco = self.economy["blue"]
+        if eco["gold"] < 35 or eco["meat"] < 40 or eco["pop"] >= eco["pop_cap"]:
+            return
+        barracks = next(
+            (b for b in self.buildings if b.team == "blue"
+             and b.selected and b.alive and type(b).__name__ == "Barracks"),
+            None,
+        )
+        if barracks is None:
+            return
+        eco["gold"] -= 35
+        eco["meat"] -= 40
+        angle = random.uniform(0, 2 * math.pi)
+        self.units.append(Warrior(
+            barracks.x + math.cos(angle) * 120,
+            barracks.y + math.sin(angle) * 120,
+            team="blue",
+        ))
 
     def _handle_right_click(self, screen_pos):
         sx, sy = screen_pos
@@ -278,6 +376,16 @@ class Game:
     # Update
     # ------------------------------------------------------------------
 
+    def _recalc_pop(self):
+        for team in ("blue", "black"):
+            eco = self.economy[team]
+            eco["pop"] = sum(1 for u in self.units + self.pawns if u.team == team)
+            eco["pop_cap"] = sum(
+                10 if type(b).__name__ == "Castle" else House.POP_BONUS
+                for b in self.buildings
+                if b.team == team and b.alive and type(b).__name__ in ("Castle", "House")
+            )
+
     def update(self, dt: float):
         self.camera.update(dt, self.map.pixel_width, self.map.pixel_height)
 
@@ -303,6 +411,7 @@ class Game:
         self.pawns = [p for p in self.pawns if p.alive]
         self.arrows = [a for a in self.arrows if a.alive]
         self.buildings = [b for b in self.buildings if b.alive]
+        self._recalc_pop()
 
     def _apply_building_collision(self):
         for unit in self.units + self.pawns:
@@ -363,7 +472,7 @@ class Game:
         self._draw_drag_box()
         if self.debug:
             self._draw_debug()
-        self._draw_hud()
+        self.hud.draw(self.screen, self.economy, self._all_selectable())
 
     def _draw_drag_box(self):
         if not self._dragging or not self._drag_start:
@@ -444,18 +553,3 @@ class Game:
             r = int(pawn.DEPOSIT_RADIUS * self.camera.zoom)
             pygame.draw.circle(self.screen, (255, 120, 0), (int(px), int(py)), r, 1)
 
-    def _draw_hud(self):
-        eco = self.economy["blue"]
-        blue = sum(1 for u in self.units if u.team == "blue")
-        black = sum(1 for u in self.units if u.team == "black")
-        sel = sum(1 for u in self._all_selectable() if u.selected)
-
-        lines = [
-            "WASD/Arrows: pan   Scroll: zoom   D: debug   Esc: quit",
-            "Left/drag: select   Shift: multi   Right-click: move / attack / gather",
-            f"Blue: {blue}  Black: {black}  Pawns: {len(self.pawns)}  Selected: {sel}",
-            f"Gold: {eco['gold']}   Wood: {eco['wood']}   Meat: {eco['meat']}",
-        ]
-        for i, line in enumerate(lines):
-            surf = self.font.render(line, True, (230, 230, 230))
-            self.screen.blit(surf, (10, 8 + i * 20))
