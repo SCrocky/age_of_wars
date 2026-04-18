@@ -27,6 +27,9 @@ class Entity:
     def closest_point(self, x: float, y: float) -> tuple[float, float]:
         return self.x, self.y
 
+    def take_damage(self, amount: int, is_melee: bool = False):
+        self.hp -= amount
+
     def receive_melee_hit(self, attacker):
         """Called when struck by a melee attack. Override to react (e.g. play defence animation)."""
         pass

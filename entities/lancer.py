@@ -172,10 +172,13 @@ class Lancer(Unit):
         if self._attack_cooldown > 0:
             return
 
+        if self._hit_timer == 0.0:
+            self._frame_idx = 0
+
         self._hit_timer += dt
         if not self._hit_dealt and self._hit_timer >= HIT_DELAY:
             self._hit_dealt = True
-            self.attack_target.hp -= ATTACK_DAMAGE
+            self.attack_target.take_damage(ATTACK_DAMAGE, is_melee=True)
             self.attack_target.receive_melee_hit(self)
             self._attack_cooldown = ATTACK_COOLDOWN
             self._hit_timer       = 0.0
@@ -187,7 +190,10 @@ class Lancer(Unit):
         if self._anim_timer >= 1.0 / ANIM_FPS:
             self._anim_timer -= 1.0 / ANIM_FPS
             length = self._current_frame_count()
-            self._frame_idx = (self._frame_idx + 1) % length
+            if self._state == "attack" and self._frame_idx >= length - 1:
+                pass  # hold last frame until next swing resets to 0
+            else:
+                self._frame_idx = (self._frame_idx + 1) % length
 
     def _current_frame_count(self) -> int:
         if self._state == "attack":

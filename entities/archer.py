@@ -94,6 +94,9 @@ class Archer(Unit):
         if abs(dx) > 1:
             self._facing_right = dx > 0
 
+        if self._shoot_timer == 0.0:
+            self._frame_idx = 0
+
         self._shoot_timer += dt
 
         if not self._arrow_spawned and self._shoot_timer >= self.SHOOT_DELAY:
@@ -101,7 +104,6 @@ class Archer(Unit):
             self._attack_cooldown = self.ATTACK_COOLDOWN
             self._shoot_timer     = 0.0
             self._arrow_spawned   = False
-            self._frame_idx       = 0
             return Arrow(self.x, self.y, self.attack_target, ARROW_DAMAGE, self.team)
 
         return None
@@ -111,7 +113,10 @@ class Archer(Unit):
         if self._anim_timer >= 1.0 / ANIM_FPS:
             self._anim_timer -= 1.0 / ANIM_FPS
             frames = self._frames[self._state]
-            self._frame_idx = (self._frame_idx + 1) % len(frames)
+            if self._state == "attack" and self._frame_idx >= len(frames) - 1:
+                pass  # hold last frame until next shot resets to 0
+            else:
+                self._frame_idx = (self._frame_idx + 1) % len(frames)
 
     # ------------------------------------------------------------------
     # Render

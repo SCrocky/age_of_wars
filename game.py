@@ -5,6 +5,7 @@ from camera import Camera
 from map import TileMap, TILE_SIZE, GRASS
 from entities.archer import Archer
 from entities.lancer import Lancer
+from entities.warrior import Warrior
 from entities.pawn import Pawn
 from entities.building import Building, Castle
 from entities.resource import GoldNode, WoodNode, MeatNode
@@ -69,12 +70,16 @@ class Game:
             self.units.append(Archer(cx + dx, cy + dy, team="blue"))
         for dx, dy in [(-60, 80), (20, 80)]:
             self.units.append(Lancer(cx + dx, cy + dy, team="blue"))
+        for dx, dy in [(-20, 0), (60, 0)]:
+            self.units.append(Warrior(cx + dx, cy + dy, team="blue"))
 
         # --- Enemy combat units (spawned to the left of the black castle) ---
         for dx, dy in [(100, -80), (20, -80), (-60, -80)]:
             self.units.append(Archer(cx + dx, cy + dy, team="black"))
         for dx, dy in [(60, 80), (-20, 80)]:
             self.units.append(Lancer(cx + dx, cy + dy, team="black"))
+        for dx, dy in [(20, 0), (-60, 0)]:
+            self.units.append(Warrior(cx + dx, cy + dy, team="black"))
 
         # --- Player pawns (to the left of the blue castle, outside its footprint) ---
         for dx, dy in [(-580, -60), (-620, 0), (-580, 60)]:
