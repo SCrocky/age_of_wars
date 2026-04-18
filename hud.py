@@ -85,6 +85,12 @@ class HUD:
             f"{_UI}/Buttons/SmallBlueSquareButton_Pressed.png"
         ).convert_alpha()
 
+        self._build_icons: dict[str, pygame.Surface] = {
+            "Archery":  pygame.image.load("assets/Buildings/Blue Buildings/Archery.png").convert_alpha(),
+            "Barracks": pygame.image.load("assets/Buildings/Blue Buildings/Barracks.png").convert_alpha(),
+            "House":    pygame.image.load("assets/Buildings/Blue Buildings/House1.png").convert_alpha(),
+        }
+
     def _get_avatar(self, n: int) -> pygame.Surface:
         if n not in self._avatars:
             self._avatars[n] = pygame.image.load(
@@ -212,16 +218,41 @@ class HUD:
     # ------------------------------------------------------------------
 
     def _draw_selection(self, surface: pygame.Surface, selected: list, eco: dict):
-        pad = self.PAD
-        ph  = 116
-        pw  = min(self.sw - 40, 640)
-        px  = (self.sw - pw) // 2
-        py  = self.sh - ph - pad
+        from entities.blueprint import BUILDABLE
+        pad      = self.PAD
+        ph_info  = 116
+        has_pawn = any(type(e).__name__ == "Pawn" for e in selected)
+        ph_build = BUTTON_SIZE + pad * 2 if has_pawn else 0
+        ph       = ph_info + ph_build
+        pw       = min(self.sw - 40, 640)
+        px       = (self.sw - pw) // 2
+        py       = self.sh - ph - pad
         self._draw_panel(surface, px, py, pw, ph)
         if len(selected) == 1:
-            self._draw_single(surface, selected[0], px, py, pw, ph, eco)
+            self._draw_single(surface, selected[0], px, py, pw, ph_info, eco)
         else:
-            self._draw_multi(surface, selected, px, py, pw, ph)
+            self._draw_multi(surface, selected, px, py, pw, ph_info)
+        if has_pawn:
+            self._draw_build_row(surface, px, py + ph_info, pw, eco, BUILDABLE)
+
+    def _draw_build_row(self, surface: pygame.Surface, px: int, py: int, pw: int,
+                        eco: dict, buildable: dict):
+        pad     = self.PAD
+        names   = list(buildable.keys())
+        total_w = len(names) * BUTTON_SIZE + (len(names) - 1) * pad
+        start_x = px + (pw - total_w) // 2
+        by      = py + pad
+        for i, name in enumerate(names):
+            _, costs = buildable[name]
+            bx   = start_x + i * (BUTTON_SIZE + pad)
+            rect = pygame.Rect(bx, by, BUTTON_SIZE, BUTTON_SIZE)
+            self._draw_button(
+                surface, rect,
+                icon       = self._build_icons[name],
+                costs      = costs,
+                affordable = self._can_afford(eco, costs),
+                action     = f"build_{name.lower()}",
+            )
 
     def _draw_single(self, surface: pygame.Surface, ent, px, py, pw, ph, eco: dict):
         pad = self.PAD

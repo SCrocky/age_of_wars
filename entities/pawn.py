@@ -3,9 +3,10 @@ import pygame
 from entities.unit import Unit
 from map import TILE_SIZE
 
-ANIM_FPS    = 8
-GATHER_RATE = 15    # resource units per second
-CARRY_MAX   = 30
+ANIM_FPS       = 8
+GATHER_RATE    = 15    # resource units per second
+CARRY_MAX      = 30
+INTERACT_RADIUS = 60.0
 
 
 
@@ -65,8 +66,10 @@ class Pawn(Unit):
         folder = f"assets/Units/{team.capitalize()} Units/Pawn"
         fs = self.FRAME_SIZE
 
-        self._frames_idle = _load_sheet(f"{folder}/Pawn_Idle.png", fs)
-        self._frames_run  = _load_sheet(f"{folder}/Pawn_Run.png",  fs)
+        self._frames_idle            = _load_sheet(f"{folder}/Pawn_Idle.png",           fs)
+        self._frames_run             = _load_sheet(f"{folder}/Pawn_Run.png",            fs)
+        self._frames_run_hammer      = _load_sheet(f"{folder}/Pawn_Run Hammer.png",     fs)
+        self._frames_interact_hammer = _load_sheet(f"{folder}/Pawn_Interact Hammer.png", fs)
 
         # Lazy-loaded per resource type; populated in assign_gather
         self._frames_to:     list[pygame.Surface] = []
@@ -83,11 +86,21 @@ class Pawn(Unit):
         self._resource_type: str  = ""
         self._carried:       float = 0.0
         self._gather_timer:  float = 0.0
-        self._task:          str   = ""    # 'to_resource' | 'gather' | 'to_depot'
+        self._task:          str   = ""    # 'to_resource' | 'gather' | 'to_depot' | 'to_build' | 'build'
+
+        # Build task
+        self._blueprint = None
 
     # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------
+
+    def assign_build(self, blueprint):
+        """Assign this pawn to construct a blueprint."""
+        self._blueprint      = blueprint
+        self._task           = "to_build"
+        self._resource_node  = None
+        self.path            = []
 
     def assign_gather(self, resource_node, depots):
         """Assign this pawn to gather from resource_node and deposit at the nearest depot."""
@@ -164,6 +177,30 @@ class Pawn(Unit):
                     self._task    = "to_resource"
                     self.path     = []
 
+        elif self._task == "to_build":
+            self._state = "run_to_build"
+            if not self._blueprint or not self._blueprint.alive:
+                self._task  = ""
+                self._state = "idle"
+            else:
+                tx, ty = self._blueprint.closest_point(self.x, self.y)
+                self._navigate_to(tx, ty, dt, tile_map, INTERACT_RADIUS)
+                if math.hypot(tx - self.x, ty - self.y) <= INTERACT_RADIUS:
+                    self._task = "build"
+
+        elif self._task == "build":
+            self._state = "build"
+            self.path   = []
+            if not self._blueprint or not self._blueprint.alive:
+                self._task  = ""
+                self._state = "idle"
+            else:
+                dx = self._blueprint.x - self.x
+                if abs(dx) > 1:
+                    self._facing_right = dx > 0
+                from entities.blueprint import BUILD_RATE
+                self._blueprint.add_progress(BUILD_RATE * dt)
+
         elif self.path:
             self._state = "run"
             self._move_along_path(dt)
@@ -209,10 +246,12 @@ class Pawn(Unit):
             self._frame_idx = (self._frame_idx + 1) % len(frames)
 
     def _current_frames(self) -> list:
-        if self._state == "run_to"     and self._frames_to:     return self._frames_to
-        if self._state == "gather"     and self._frames_gather:  return self._frames_gather
-        if self._state == "run_return" and self._frames_return:  return self._frames_return
-        if self._state == "run":                                  return self._frames_run
+        if self._state == "run_to"       and self._frames_to:              return self._frames_to
+        if self._state == "gather"       and self._frames_gather:           return self._frames_gather
+        if self._state == "run_return"   and self._frames_return:           return self._frames_return
+        if self._state == "run_to_build":                                   return self._frames_run_hammer
+        if self._state == "build":                                          return self._frames_interact_hammer
+        if self._state == "run":                                            return self._frames_run
         return self._frames_idle
 
     # ------------------------------------------------------------------

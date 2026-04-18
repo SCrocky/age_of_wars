@@ -10,6 +10,7 @@ from entities.pawn import Pawn
 from entities.building import Building, Castle, Archery, Barracks, House
 from entities.resource import GoldNode, WoodNode, MeatNode
 from entities.projectile import Arrow
+from entities.blueprint import Blueprint, BUILDABLE
 from systems.pathfinding import astar
 from hud import HUD
 
@@ -37,6 +38,7 @@ class Game:
         self.pawns: list[Pawn] = []
         self.arrows: list[Arrow] = []
         self.buildings: list[Building] = []
+        self.blueprints: list[Blueprint] = []
         self.resources: list = []
 
         # Economy: resource counts per team
@@ -49,6 +51,7 @@ class Game:
 
         self._drag_start: tuple[int, int] | None = None
         self._dragging: bool = False
+        self._pending_build: str | None = None
         self.debug: bool = False
 
     # ------------------------------------------------------------------
@@ -151,7 +154,10 @@ class Game:
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                if self._pending_build:
+                    self._pending_build = None
+                else:
+                    pygame.event.post(pygame.event.Event(pygame.QUIT))
             elif event.key == pygame.K_d:
                 self.debug = not self.debug
 
@@ -180,7 +186,11 @@ class Game:
                         self._handle_spawn_lancer()
                     elif action == "spawn_warrior":
                         self._handle_spawn_warrior()
+                    elif action and action.startswith("build_"):
+                        name = action[6:]
+                        self._pending_build = name[0].upper() + name[1:]
                     else:
+                        self._pending_build = None
                         self._handle_left_click(event.pos)
                 self._drag_start = None
                 self._dragging = False
@@ -308,7 +318,29 @@ class Game:
             team="blue",
         ))
 
+    def _place_blueprint(self, screen_pos):
+        name = self._pending_build
+        self._pending_build = None
+        cls, costs = BUILDABLE[name]
+        eco = self.economy["blue"]
+        if not all(eco.get(k, 0) >= v for k, v in costs.items()):
+            return
+        for k, v in costs.items():
+            eco[k] -= v
+        sx, sy = screen_pos
+        wx, wy = self.camera.screen_to_world(sx, sy)
+        building = cls(wx, wy, team="blue")
+        self.map.clear_area(wx, wy, tile_radius=4)
+        bp = Blueprint(building)
+        self.blueprints.append(bp)
+        for pawn in self.pawns:
+            if pawn.selected and pawn.team == "blue":
+                pawn.assign_build(bp)
+
     def _handle_right_click(self, screen_pos):
+        if self._pending_build:
+            self._place_blueprint(screen_pos)
+            return
         sx, sy = screen_pos
         wx, wy = self.camera.screen_to_world(sx, sy)
 
@@ -407,16 +439,21 @@ class Game:
         self._apply_separation(dt)
         self._apply_building_collision()
 
-        self.units = [u for u in self.units if u.alive]
-        self.pawns = [p for p in self.pawns if p.alive]
-        self.arrows = [a for a in self.arrows if a.alive]
-        self.buildings = [b for b in self.buildings if b.alive]
+        for bp in self.blueprints:
+            if bp.alive and bp.progress >= bp.max_hp:
+                self.buildings.append(bp.complete())
+
+        self.units      = [u for u in self.units      if u.alive]
+        self.pawns      = [p for p in self.pawns      if p.alive]
+        self.arrows     = [a for a in self.arrows     if a.alive]
+        self.buildings  = [b for b in self.buildings  if b.alive]
+        self.blueprints = [b for b in self.blueprints if b.alive]
         self._recalc_pop()
 
     def _apply_building_collision(self):
         for unit in self.units + self.pawns:
             r = unit.DISPLAY_SIZE / 4
-            for building in self.buildings:
+            for building in self.buildings + self.blueprints:
                 hw = building.COLLISION_W / 2 + r
                 hh = building.COLLISION_H / 2 + r
                 dx = unit.x - building.x
@@ -461,13 +498,21 @@ class Game:
         self.map.render(self.screen, self.camera)
 
         # Y-sort all world objects so lower objects draw on top (painter's algorithm)
-        world_objects = self.resources + self.buildings + self.units + self.pawns
+        world_objects = self.resources + self.blueprints + self.buildings + self.units + self.pawns
         world_objects.sort(key=lambda obj: obj.sort_y)
         for obj in world_objects:
             obj.render(self.screen, self.camera)
 
         for arrow in self.arrows:
             arrow.render(self.screen, self.camera)
+
+        if self._pending_build:
+            font = pygame.font.SysFont(None, 28)
+            txt  = font.render(
+                f"Right-click to place {self._pending_build}  (ESC to cancel)",
+                True, (255, 220, 80),
+            )
+            self.screen.blit(txt, (self.w // 2 - txt.get_width() // 2, 56))
 
         self._draw_drag_box()
         if self.debug:
