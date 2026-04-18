@@ -56,7 +56,7 @@ class Arrow:
         dist = math.hypot(dx, dy)
 
         if dist <= ARROW_HIT_RADIUS:
-            self.target.hp -= self.damage
+            self.target.take_damage(self.damage)
             self.alive = False
             return
 
