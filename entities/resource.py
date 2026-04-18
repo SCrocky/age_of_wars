@@ -107,6 +107,10 @@ class WoodNode(ResourceNode):
             f"assets/Terrain/Resources/Wood/Trees/Stump {n}.png"
         ).convert_alpha()
 
+    @property
+    def sort_y(self) -> float:
+        return self.y + self.DISPLAY_SIZE / 2
+
     def _frame_count(self) -> int:
         return len(self._frames)
 

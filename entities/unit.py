@@ -71,7 +71,7 @@ class Unit(Entity):
 
     @property
     def sort_y(self) -> float:
-        return self.y + self.DISPLAY_SIZE * 0.5
+        return self.y
 
     def hit_test(self, sx: float, sy: float, camera) -> bool:
         ux, uy = camera.world_to_screen(self.x, self.y)
