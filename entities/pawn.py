@@ -81,8 +81,8 @@ class Pawn(Unit):
         self._anim_timer:  float = 0.0
 
         # Gather task
-        self._resource_node  = None
-        self._depots:        list = []
+        self._resource_node = None
+        self._buildings:    tuple = ()
         self._resource_type: str  = ""
         self._carried:       float = 0.0
         self._gather_timer:  float = 0.0
@@ -102,10 +102,10 @@ class Pawn(Unit):
         self._resource_node  = None
         self.path            = []
 
-    def assign_gather(self, resource_node, depots):
-        """Assign this pawn to gather from resource_node and deposit at the nearest depot."""
+    def assign_gather(self, resource_node, buildings):
+        """Assign this pawn to gather from resource_node and deposit at the nearest alive depot."""
         self._resource_node = resource_node
-        self._depots        = depots if isinstance(depots, list) else [depots]
+        self._buildings     = tuple(buildings)
         self._resource_type = resource_node.resource_type
 
         folder = f"assets/Units/{self.team.capitalize()} Units/Pawn"
@@ -165,7 +165,10 @@ class Pawn(Unit):
         elif self._task == "to_depot":
             self._state = "run_return"
             depot = self._nearest_depot()
-            if depot:
+            if not depot:
+                self._task  = ""
+                self._state = "idle"
+            else:
                 tx, ty = depot.closest_point(self.x, self.y)
                 self._navigate_to(tx, ty, dt, tile_map, self.DEPOSIT_RADIUS)
                 if math.hypot(tx - self.x, ty - self.y) <= self.DEPOSIT_RADIUS:
@@ -214,9 +217,10 @@ class Pawn(Unit):
     # ------------------------------------------------------------------
 
     def _nearest_depot(self):
-        if not self._depots:
+        depots = [b for b in self._buildings if b.alive and b.is_depot and b.team == self.team]
+        if not depots:
             return None
-        return min(self._depots, key=lambda d: math.hypot(d.x - self.x, d.y - self.y))
+        return min(depots, key=lambda d: math.hypot(d.x - self.x, d.y - self.y))
 
     def _navigate_to(self, tx: float, ty: float, dt: float, tile_map, arrive_radius: float):
         """Move toward (tx, ty); re-path if needed."""

@@ -362,11 +362,8 @@ class Game:
             return
 
         # Right-click on a resource node → gather (pawns only)
-        friendly_depots = [
-            b for b in self.buildings
-            if b.team == "blue" and b.alive and type(b).__name__ in ("Castle", "House")
-        ]
-        if friendly_depots and selected_pawns:
+        has_depot = any(b.is_depot and b.team == "blue" and b.alive for b in self.buildings)
+        if has_depot and selected_pawns:
             resource = next(
                 (
                     r
@@ -377,7 +374,7 @@ class Game:
             )
             if resource:
                 for pawn in selected_pawns:
-                    pawn.assign_gather(resource, friendly_depots)
+                    pawn.assign_gather(resource, self.buildings)
                 return
 
         # Otherwise → move (all selected blue units + pawns)
