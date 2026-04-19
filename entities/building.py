@@ -2,6 +2,8 @@ import math
 import pygame
 from entities.entity import Entity
 
+TILE_SIZE = 64
+
 
 class Building(Entity):
     """Base class for all static structures."""
@@ -23,6 +25,25 @@ class Building(Entity):
             max(self.x - hw, min(x, self.x + hw)),
             max(self.y - hh, min(y, self.y + hh)),
         )
+
+    def sprite_closest_point(self, x: float, y: float) -> tuple[float, float]:
+        hw = self.DISPLAY_W / 2
+        hh = self.DISPLAY_H / 2
+        return (
+            max(self.x - hw, min(x, self.x + hw)),
+            max(self.y - hh, min(y, self.y + hh)),
+        )
+
+    def _tile_half(self) -> tuple[int, int]:
+        hw = math.ceil(self.COLLISION_W / 2 / TILE_SIZE)
+        hh = math.ceil(self.COLLISION_H / 2 / TILE_SIZE)
+        return hw, hh
+
+    def on_place(self, tile_map):
+        tile_map.block_area(self.x, self.y, *self._tile_half())
+
+    def on_destroy(self, tile_map):
+        tile_map.unblock_area(self.x, self.y, *self._tile_half())
 
     def hit_test(self, sx: float, sy: float, camera) -> bool:
         ux, uy = camera.world_to_screen(self.x, self.y)

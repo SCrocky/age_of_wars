@@ -223,13 +223,21 @@ class Pawn(Unit):
         return min(depots, key=lambda d: math.hypot(d.x - self.x, d.y - self.y))
 
     def _navigate_to(self, tx: float, ty: float, dt: float, tile_map, arrive_radius: float):
-        """Move toward (tx, ty); re-path if needed."""
+        """Move toward (tx, ty); re-path if needed, direct-move when path exhausted."""
         if not self.path:
             if tile_map:
                 self._repath(tx, ty, tile_map)
         dist = math.hypot(tx - self.x, ty - self.y)
         if dist > arrive_radius:
-            self._move_along_path(dt)
+            if self.path:
+                self._move_along_path(dt)
+            else:
+                dx, dy = tx - self.x, ty - self.y
+                step = self.MOVE_SPEED * dt
+                self.x += dx / dist * step
+                self.y += dy / dist * step
+                if abs(dx) > 1:
+                    self._facing_right = dx > 0
 
     def _repath(self, tx: float, ty: float, tile_map):
         from systems.pathfinding import astar

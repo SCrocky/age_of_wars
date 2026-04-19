@@ -135,6 +135,14 @@ class TileMap:
                 if 0 <= col < self.cols and 0 <= row < self.rows:
                     self.blocked.add((col, row))
 
+    def unblock_area(self, world_x: float, world_y: float, half_w: int, half_h: int):
+        """Remove a rectangular tile area from the blocked set."""
+        cx = int(world_x // TILE_SIZE)
+        cy = int(world_y // TILE_SIZE)
+        for dr in range(-half_h, half_h + 1):
+            for dc in range(-half_w, half_w + 1):
+                self.blocked.discard((cx + dc, cy + dr))
+
     def nearest_walkable(self, col: int, row: int) -> tuple[int, int]:
         """Return the walkable tile closest to (col, row) by Euclidean distance."""
         if self.is_walkable(col, row):

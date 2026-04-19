@@ -141,12 +141,7 @@ class Lancer(Unit):
                 else:
                     self._state     = "run"
                     self._hit_timer = 0.0
-                    if tile_map is not None:
-                        self._chase_timer -= dt
-                        if self._chase_timer <= 0:
-                            self._chase_timer = self.CHASE_INTERVAL
-                            self._repath_to_target(tile_map)
-                    self._move_along_path(dt)
+                    self._chase(dt, tile_map)
 
         elif self.path:
             self._state = "run"

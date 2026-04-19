@@ -1,4 +1,5 @@
 import math
+import random
 import pygame
 from entities.entity import Entity
 from map import TILE_SIZE
@@ -20,6 +21,7 @@ class Unit(Entity):
         self._last_shot_time: float = 0.0
         self._chase_timer:    float = 0.0
         self._facing_right:   bool  = True
+        self._arrival_offset: tuple[float, float] = (0.0, 0.0)
 
     # ------------------------------------------------------------------
     # Commands
@@ -28,6 +30,10 @@ class Unit(Entity):
     def set_path(self, path: list[tuple[int, int]]):
         self.path = list(path)
         self.attack_target = None
+        if path:
+            self._arrival_offset = (random.uniform(-12.0, 12.0), random.uniform(-12.0, 12.0))
+        else:
+            self._arrival_offset = (0.0, 0.0)
 
     def set_attack_target(self, target):
         self.attack_target = target
@@ -43,6 +49,9 @@ class Unit(Entity):
         col, row = self.path[0]
         target_x = col * TILE_SIZE + TILE_SIZE / 2
         target_y = row * TILE_SIZE + TILE_SIZE / 2
+        if len(self.path) == 1:
+            target_x += self._arrival_offset[0]
+            target_y += self._arrival_offset[1]
         dx = target_x - self.x
         dy = target_y - self.y
         dist = math.hypot(dx, dy)
@@ -60,11 +69,32 @@ class Unit(Entity):
         tx, ty = self.attack_target.closest_point(self.x, self.y)
         return math.hypot(tx - self.x, ty - self.y)
 
+    def _chase(self, dt: float, tile_map):
+        """Follow path toward attack_target; step directly if path is exhausted."""
+        if tile_map is not None:
+            self._chase_timer -= dt
+            if self._chase_timer <= 0:
+                self._chase_timer = self.CHASE_INTERVAL
+                self._repath_to_target(tile_map)
+        if self.path:
+            self._move_along_path(dt)
+        elif self.attack_target:
+            tx, ty = self.attack_target.closest_point(self.x, self.y)
+            dx, dy = tx - self.x, ty - self.y
+            dist = math.hypot(dx, dy)
+            if dist > 0:
+                step = self.MOVE_SPEED * dt
+                self.x += dx / dist * step
+                self.y += dy / dist * step
+                if abs(dx) > 1:
+                    self._facing_right = dx > 0
+
     def _repath_to_target(self, tile_map):
         from systems.pathfinding import astar
         sc = int(self.x // TILE_SIZE)
         sr = int(self.y // TILE_SIZE)
-        tx, ty = self.attack_target.closest_point(self.x, self.y)
+        get_point = getattr(self.attack_target, 'sprite_closest_point', self.attack_target.closest_point)
+        tx, ty = get_point(self.x, self.y)
         gc = int(tx // TILE_SIZE)
         gr = int(ty // TILE_SIZE)
         gc, gr = tile_map.nearest_walkable(gc, gr)

@@ -77,6 +77,7 @@ class Game:
 
         for b in self.buildings:
             self.map.clear_area(b.x, b.y, tile_radius=4)
+            b.on_place(self.map)
 
         # --- Player combat units (spawned to the right of the blue castle) ---
         for dx, dy in [(-100, -80), (-20, -80), (60, -80)]:
@@ -378,14 +379,12 @@ class Game:
                 return
 
         # Otherwise → move (all selected blue units + pawns)
-        goal_col = int(wx // TILE_SIZE)
-        goal_row = int(wy // TILE_SIZE)
+        goal_col = max(0, min(int(wx // TILE_SIZE), self.map.cols - 1))
+        goal_row = max(0, min(int(wy // TILE_SIZE), self.map.rows - 1))
         all_selected = selected_combat + selected_pawns
         offsets = self._formation_offsets(len(all_selected))
         for unit, (dc, dr) in zip(all_selected, offsets):
-            target = (goal_col + dc, goal_row + dr)
-            if not self.map.is_walkable(*target):
-                target = (goal_col, goal_row)
+            target = self.map.nearest_walkable(goal_col + dc, goal_row + dr)
             start_tile = (int(unit.x // TILE_SIZE), int(unit.y // TILE_SIZE))
             path = astar(self.map, start_tile, target)
             unit.set_path(path)
@@ -440,15 +439,26 @@ class Game:
         self._apply_separation(dt)
         self._apply_building_collision()
 
+        next_buildings  = []
+        next_blueprints = []
         for bp in self.blueprints:
             if bp.alive and bp.progress >= bp.max_hp:
-                self.buildings.append(bp.complete())
+                building = bp.complete()
+                building.on_place(self.map)
+                next_buildings.append(building)
+            elif bp.alive:
+                next_blueprints.append(bp)
+        for b in self.buildings:
+            if b.alive:
+                next_buildings.append(b)
+            else:
+                b.on_destroy(self.map)
+        self.buildings  = next_buildings
+        self.blueprints = next_blueprints
 
-        self.units      = [u for u in self.units      if u.alive]
-        self.pawns      = [p for p in self.pawns      if p.alive]
-        self.arrows     = [a for a in self.arrows     if a.alive]
-        self.buildings  = [b for b in self.buildings  if b.alive]
-        self.blueprints = [b for b in self.blueprints if b.alive]
+        self.units  = [u for u in self.units  if u.alive]
+        self.pawns  = [p for p in self.pawns  if p.alive]
+        self.arrows = [a for a in self.arrows if a.alive]
         self._recalc_pop()
 
     def _apply_building_collision(self):
@@ -468,8 +478,8 @@ class Game:
                         unit.y += oy * (1 if dy >= 0 else -1)
 
     def _apply_separation(self, dt: float):
-        RADIUS = 40.0
-        FORCE = 120.0
+        RADIUS = 52.0
+        FORCE = 180.0
         all_units = self.units + self.pawns
         for i, a in enumerate(all_units):
             fx = fy = 0.0
