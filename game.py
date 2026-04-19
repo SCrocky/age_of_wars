@@ -53,6 +53,7 @@ class Game:
         self._dragging: bool = False
         self._pending_build: str | None = None
         self.debug: bool = False
+        self._last_dt: float = 1 / 60
 
     # ------------------------------------------------------------------
     # Setup
@@ -270,7 +271,6 @@ class Game:
         if castle is None:
             return
         eco["meat"] -= 20
-        import random
         angle = random.uniform(0, 2 * math.pi)
         dist  = 120
         px    = castle.x + math.cos(angle) * dist
@@ -422,6 +422,7 @@ class Game:
             )
 
     def update(self, dt: float):
+        self._last_dt = dt
         self.camera.update(dt, self.map.pixel_width, self.map.pixel_height)
 
         for unit in self.units:
@@ -540,6 +541,16 @@ class Game:
     def _draw_debug(self):
         font = pygame.font.SysFont(None, 18)
         ts = TILE_SIZE
+
+        fps = 1.0 / self._last_dt if self._last_dt > 0 else 0
+        stats = (
+            f"FPS: {fps:.0f}  "
+            f"units: {len(self.units)}  pawns: {len(self.pawns)}  "
+            f"buildings: {len(self.buildings)}  arrows: {len(self.arrows)}  "
+            f"resources: {len(self.resources)}"
+        )
+        surf = font.render(stats, True, (200, 255, 200))
+        self.screen.blit(surf, (8, 8))
 
         # Blocked tiles
         tile_px = max(1, int(ts * self.camera.zoom))

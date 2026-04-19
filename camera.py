@@ -25,14 +25,14 @@ class Camera:
 
         speed = self.PAN_SPEED / self.zoom * dt
 
-        # Keyboard pan (WASD / arrow keys)
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        # Keyboard pan (arrow keys)
+        if keys[pygame.K_LEFT]:
             self.x -= speed
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+        if keys[pygame.K_RIGHT]:
             self.x += speed
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
+        if keys[pygame.K_UP]:
             self.y -= speed
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+        if keys[pygame.K_DOWN]:
             self.y += speed
 
         # Edge-scroll with mouse

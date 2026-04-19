@@ -8,7 +8,7 @@ FPS = 60
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
     pygame.display.set_caption("Age of Wars")
     clock = pygame.time.Clock()
 
