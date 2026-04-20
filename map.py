@@ -1,7 +1,6 @@
 import math
 import pygame
 import random
-from render_cache import get_scaled
 
 TILE_SIZE = 64  # world pixels per tile
 
@@ -29,6 +28,7 @@ class TileMap:
         self.rows = rows
         self.tiles: list[list[int]] = []
         self.blocked: set[tuple[int, int]] = set()
+        self._tile_cache: pygame.Surface | None = None
 
         self._load_sprites()
         self._generate()
@@ -41,6 +41,7 @@ class TileMap:
         obj.rows = rows
         obj.tiles = [list(row) for row in tiles]
         obj.blocked = set()
+        obj._tile_cache = None
         obj._load_sprites()
         return obj
 
@@ -136,6 +137,7 @@ class TileMap:
                 col, row = cx + dc, cy + dr
                 if 0 <= col < self.cols and 0 <= row < self.rows:
                     self.tiles[row][col] = GRASS
+        self._tile_cache = None
 
     def block_area(self, world_x: float, world_y: float, half_w: int, half_h: int):
         """Mark a rectangular tile area as unwalkable without changing its visual."""
@@ -185,37 +187,42 @@ class TileMap:
     # Rendering
     # ------------------------------------------------------------------
 
-    def render(self, surface: pygame.Surface, camera):
-        zoom = camera.zoom
-        scaled_tile = int(TILE_SIZE * zoom)
-        if scaled_tile < 1:
-            scaled_tile = 1
-
-        # Visible tile range (add 1 tile padding to avoid edge gaps)
-        start_col = max(0, int(camera.x // TILE_SIZE))
-        start_row = max(0, int(camera.y // TILE_SIZE))
-        end_col = min(
-            self.cols,
-            int((camera.x + surface.get_width() / zoom) // TILE_SIZE) + 2,
-        )
-        end_row = min(
-            self.rows,
-            int((camera.y + surface.get_height() / zoom) // TILE_SIZE) + 2,
-        )
-
-        scaled_water = get_scaled(self._water_tile, scaled_tile, scaled_tile)
-
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                wx = col * TILE_SIZE
-                wy = row * TILE_SIZE
-                sx, sy = camera.world_to_screen(wx, wy)
-                dest = pygame.Rect(int(sx), int(sy), scaled_tile, scaled_tile)
-
-                tile_type = self.tiles[row][col]
-                if tile_type == WATER:
-                    surface.blit(scaled_water, dest)
+    def _build_tile_cache(self):
+        """Pre-render all tiles into a full-resolution Surface (zoom=1.0)."""
+        surf = pygame.Surface((self.pixel_width, self.pixel_height))
+        for row in range(self.rows):
+            for col in range(self.cols):
+                x = col * TILE_SIZE
+                y = row * TILE_SIZE
+                if self.tiles[row][col] == WATER:
+                    surf.blit(self._water_tile, (x, y))
                 else:
-                    # Expand by 1px to eliminate sub-pixel gaps between tiles
-                    gapless = pygame.Rect(dest.x, dest.y, dest.w + 1, dest.h + 1)
-                    pygame.draw.rect(surface, self._grass_colour, gapless)
+                    # +1 to eliminate sub-pixel gaps when scaled
+                    pygame.draw.rect(surf, self._grass_colour,
+                                     (x, y, TILE_SIZE + 1, TILE_SIZE + 1))
+        self._tile_cache = surf
+
+    def render(self, surface: pygame.Surface, camera):
+        if self._tile_cache is None:
+            self._build_tile_cache()
+
+        zoom = camera.zoom
+        sw = surface.get_width()
+        sh = surface.get_height()
+
+        # Visible world region (clamped to map bounds)
+        src_x = max(0, int(camera.x))
+        src_y = max(0, int(camera.y))
+        src_x2 = min(self.pixel_width,  int(math.ceil(camera.x + sw / zoom)) + 1)
+        src_y2 = min(self.pixel_height, int(math.ceil(camera.y + sh / zoom)) + 1)
+        src_w = max(1, src_x2 - src_x)
+        src_h = max(1, src_y2 - src_y)
+
+        # Destination on screen (offset accounts for sub-pixel camera position)
+        dst_x = int((src_x - camera.x) * zoom)
+        dst_y = int((src_y - camera.y) * zoom)
+        dst_w = max(1, int(src_w * zoom))
+        dst_h = max(1, int(src_h * zoom))
+
+        sub = self._tile_cache.subsurface((src_x, src_y, src_w, src_h))
+        surface.blit(pygame.transform.scale(sub, (dst_w, dst_h)), (dst_x, dst_y))
