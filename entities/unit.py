@@ -3,6 +3,7 @@ import random
 import pygame
 from entities.entity import Entity
 from map import TILE_SIZE
+from render_cache import get_scaled
 
 
 class Unit(Entity):
@@ -12,6 +13,7 @@ class Unit(Entity):
     WAYPOINT_RADIUS = 4.0
     CHASE_INTERVAL  = 0.5
     DISPLAY_SIZE    = 96
+    SELECT_RADIUS   = 20
 
     def __init__(self, x: float, y: float, team: str, max_hp: int = 100):
         super().__init__(x, y, team, max_hp)
@@ -108,3 +110,27 @@ class Unit(Entity):
         ux, uy = camera.world_to_screen(self.x, self.y)
         half = self.DISPLAY_SIZE * camera.zoom / 2
         return abs(sx - ux) <= half and abs(sy - uy) <= half
+
+    # ------------------------------------------------------------------
+    # Rendering
+    # ------------------------------------------------------------------
+
+    def _get_render_frame(self) -> tuple[pygame.Surface, bool]:
+        """Return (frame, flip_x). Subclasses must implement."""
+        raise NotImplementedError
+
+    def _render_extra(self, surface: pygame.Surface, camera,
+                      sx: float, sy: float, size: int):
+        """Hook for subclass-specific overlay rendering (default: nothing)."""
+
+    def render(self, surface: pygame.Surface, camera):
+        frame, flip_x = self._get_render_frame()
+        size   = max(1, int(self.DISPLAY_SIZE * camera.zoom))
+        scaled = get_scaled(frame, size, size, flip_x=flip_x)
+        sx, sy = camera.world_to_screen(self.x, self.y)
+        surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
+        if self.selected:
+            r = max(2, int(self.SELECT_RADIUS * camera.zoom))
+            pygame.draw.circle(surface, (255, 220, 0), (int(sx), int(sy)), r, 2)
+        self.draw_health_bar(surface, camera)
+        self._render_extra(surface, camera, sx, sy, size)

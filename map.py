@@ -1,6 +1,7 @@
 import math
 import pygame
 import random
+from render_cache import get_scaled
 
 TILE_SIZE = 64  # world pixels per tile
 
@@ -202,7 +203,7 @@ class TileMap:
             int((camera.y + surface.get_height() / zoom) // TILE_SIZE) + 2,
         )
 
-        scaled_water = pygame.transform.scale(self._water_tile, (scaled_tile, scaled_tile))
+        scaled_water = get_scaled(self._water_tile, scaled_tile, scaled_tile)
 
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):

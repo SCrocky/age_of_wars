@@ -52,6 +52,7 @@ class Pawn(Unit):
     DISPLAY_SIZE    = 80
     MOVE_SPEED      = 80.0
     DEPOSIT_RADIUS  = 60.0
+    SELECT_RADIUS   = 18
 
     # Maps resource type → (tool_name, return_name)
     _RESOURCE_SPRITES = {
@@ -272,24 +273,11 @@ class Pawn(Unit):
     # Render
     # ------------------------------------------------------------------
 
-    def render(self, surface: pygame.Surface, camera):
+    def _get_render_frame(self):
         frames = self._current_frames()
-        frame  = frames[self._frame_idx % len(frames)]
+        return frames[self._frame_idx % len(frames)], not self._facing_right
 
-        size   = max(1, int(self.DISPLAY_SIZE * camera.zoom))
-        scaled = pygame.transform.scale(frame, (size, size))
-        if not self._facing_right:
-            scaled = pygame.transform.flip(scaled, True, False)
-
-        sx, sy = camera.world_to_screen(self.x, self.y)
-        surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
-
-        if self.selected:
-            r = max(2, int(18 * camera.zoom))
-            pygame.draw.circle(surface, (255, 220, 0), (int(sx), int(sy)), r, 2)
-
-        self.draw_health_bar(surface, camera)
-
+    def _render_extra(self, surface, camera, sx, sy, size):
         if self._task == "to_depot" and self._carried > 0:
             font = pygame.font.SysFont(None, max(12, int(16 * camera.zoom)))
             label = font.render(str(int(self._carried)), True, (255, 255, 180))

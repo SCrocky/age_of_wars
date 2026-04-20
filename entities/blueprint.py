@@ -1,5 +1,6 @@
 import pygame
 from entities.building import Archery, Barracks, House
+from render_cache import get_scaled
 
 BUILD_RATE = 30.0  # HP-equivalent progress per second per builder
 
@@ -59,7 +60,7 @@ class Blueprint:
 
         w = max(1, int(b.DISPLAY_W * camera.zoom))
         h = max(1, int(b.DISPLAY_H * camera.zoom))
-        scaled = pygame.transform.scale(b._surf, (w, h)).copy()
+        scaled = get_scaled(b._surf, w, h).copy()
         scaled.set_alpha(int(60 + ratio * 180))
         sx, sy = camera.world_to_screen(b.x, b.y)
         surface.blit(scaled, (int(sx - w / 2), int(sy - h / 2)))

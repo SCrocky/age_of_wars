@@ -1,6 +1,7 @@
 import math
 import random
 import pygame
+from render_cache import get_scaled
 
 ANIM_FPS = 6
 HIT_RADIUS = 48.0   # world px for click detection
@@ -85,7 +86,7 @@ class GoldNode(ResourceNode):
             return
         frame = self._frames[self._frame_idx % len(self._frames)]
         size = max(1, int(self.DISPLAY_SIZE * camera.zoom))
-        scaled = pygame.transform.scale(frame, (size, size))
+        scaled = get_scaled(frame, size, size)
         sx, sy = camera.world_to_screen(self.x, self.y)
         surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
 
@@ -134,11 +135,11 @@ class WoodNode(ResourceNode):
         size = max(1, int(self.DISPLAY_SIZE * camera.zoom))
         if self.depleted:
             sw = max(1, int(size * 192 / 256))
-            scaled = pygame.transform.scale(self._stump, (sw, size))
+            scaled = get_scaled(self._stump, sw, size)
             surface.blit(scaled, (int(sx - sw / 2), int(sy - size / 2)))
             return
         frame = self._frames[self._frame_idx % len(self._frames)]
-        scaled = pygame.transform.scale(frame, (size, size))
+        scaled = get_scaled(frame, size, size)
         surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
 
 
@@ -258,8 +259,6 @@ class MeatNode(ResourceNode):
         frames = self._active_frames()
         frame  = frames[self._frame_idx % len(frames)]
         size   = max(1, int(self.DISPLAY_SIZE * camera.zoom))
-        scaled = pygame.transform.scale(frame, (size, size))
-        if not self._facing_right:
-            scaled = pygame.transform.flip(scaled, True, False)
+        scaled = get_scaled(frame, size, size, flip_x=not self._facing_right)
         sx, sy = camera.world_to_screen(self.x, self.y)
         surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))

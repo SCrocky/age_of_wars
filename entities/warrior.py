@@ -31,10 +31,11 @@ class Warrior(Unit):
     guard   – brief visual played when a block lands
     """
 
-    FRAME_SIZE   = 192
-    DISPLAY_SIZE = 128
-    MOVE_SPEED   = 80.0
-    ATTACK_RANGE = 55.0
+    FRAME_SIZE    = 192
+    DISPLAY_SIZE  = 128
+    SELECT_RADIUS = 22
+    MOVE_SPEED    = 80.0
+    ATTACK_RANGE  = 55.0
 
     def __init__(self, x: float, y: float, team: str = "blue"):
         super().__init__(x, y, team, max_hp=150)
@@ -157,20 +158,6 @@ class Warrior(Unit):
     # Render
     # ------------------------------------------------------------------
 
-    def render(self, surface: pygame.Surface, camera):
+    def _get_render_frame(self):
         frames = self._current_frames()
-        frame  = frames[self._frame_idx % len(frames)]
-
-        size   = max(1, int(self.DISPLAY_SIZE * camera.zoom))
-        scaled = pygame.transform.scale(frame, (size, size))
-        if not self._facing_right:
-            scaled = pygame.transform.flip(scaled, True, False)
-
-        sx, sy = camera.world_to_screen(self.x, self.y)
-        surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
-
-        if self.selected:
-            r = max(2, int(22 * camera.zoom))
-            pygame.draw.circle(surface, (255, 220, 0), (int(sx), int(sy)), r, 2)
-
-        self.draw_health_bar(surface, camera)
+        return frames[self._frame_idx % len(frames)], not self._facing_right

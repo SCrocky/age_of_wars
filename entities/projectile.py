@@ -1,5 +1,6 @@
 import math
 import pygame
+from render_cache import get_scaled
 
 ARROW_SPEED  = 400.0   # world px / second
 ARROW_DAMAGE = 15
@@ -70,7 +71,7 @@ class Arrow:
             return
 
         size = max(1, int(self.DISPLAY_SIZE * camera.zoom))
-        scaled = pygame.transform.scale(self._surf, (size, size))
+        scaled = get_scaled(self._surf, size, size)
         rotated = pygame.transform.rotate(scaled, self._angle)
         sx, sy = camera.world_to_screen(self.x, self.y)
         rect = rotated.get_rect(center=(int(sx), int(sy)))

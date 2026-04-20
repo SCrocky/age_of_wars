@@ -71,10 +71,11 @@ class Lancer(Unit):
     idle    – standing still
     """
 
-    FRAME_SIZE   = 320
-    DISPLAY_SIZE = 128
-    MOVE_SPEED   = 88.0
-    ATTACK_RANGE = 50.0
+    FRAME_SIZE    = 320
+    DISPLAY_SIZE  = 128
+    SELECT_RADIUS = 22
+    MOVE_SPEED    = 88.0
+    ATTACK_RANGE  = 50.0
 
     def __init__(self, x: float, y: float, team: str = "blue"):
         super().__init__(x, y, team, max_hp=120)
@@ -199,24 +200,7 @@ class Lancer(Unit):
     # Render
     # ------------------------------------------------------------------
 
-    def render(self, surface: pygame.Surface, camera):
-        frame, flip_x = self._get_frame()
-
-        size   = max(1, int(self.DISPLAY_SIZE * camera.zoom))
-        scaled = pygame.transform.scale(frame, (size, size))
-        if flip_x:
-            scaled = pygame.transform.flip(scaled, True, False)
-
-        sx, sy = camera.world_to_screen(self.x, self.y)
-        surface.blit(scaled, (int(sx - size / 2), int(sy - size / 2)))
-
-        if self.selected:
-            r = max(2, int(22 * camera.zoom))
-            pygame.draw.circle(surface, (255, 220, 0), (int(sx), int(sy)), r, 2)
-
-        self.draw_health_bar(surface, camera)
-
-    def _get_frame(self) -> tuple[pygame.Surface, bool]:
+    def _get_render_frame(self) -> tuple[pygame.Surface, bool]:
         idx = self._frame_idx
         if self._state == "attack":
             frames = self._frames_attack[self._dir_key]
