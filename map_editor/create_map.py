@@ -61,8 +61,8 @@ GRASS = 1
 # ---------------------------------------------------------------------------
 # Zone layout
 # ---------------------------------------------------------------------------
-ZONE_COLS = 5
-ZONE_ROWS = 3
+ZONE_COLS = 10
+ZONE_ROWS = 6
 
 # Base probability weights for non-spawn zone types
 _BASE_W: dict[str, float] = {

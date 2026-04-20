@@ -226,7 +226,10 @@ class Pawn(Unit):
         """Move toward (tx, ty); re-path if needed, direct-move when path exhausted."""
         if not self.path:
             if tile_map:
-                self._repath(tx, ty, tile_map)
+                sc = int(self.x // TILE_SIZE)
+                sr = int(self.y // TILE_SIZE)
+                if tile_map.is_walkable(sc, sr):
+                    self._repath(tx, ty, tile_map)
         dist = math.hypot(tx - self.x, ty - self.y)
         if dist > arrive_radius:
             if self.path:
