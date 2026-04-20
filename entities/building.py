@@ -1,7 +1,5 @@
 import math
-import pygame
 from entities.entity import Entity
-from render_cache import get_scaled
 
 TILE_SIZE = 64
 
@@ -53,19 +51,6 @@ class Building(Entity):
         hh = self.DISPLAY_H * camera.zoom / 2
         return abs(sx - ux) <= hw and abs(sy - uy) <= hh
 
-    def render(self, surface: pygame.Surface, camera):
-        if not self.alive:
-            return
-        w = max(1, int(self.DISPLAY_W * camera.zoom))
-        h = max(1, int(self.DISPLAY_H * camera.zoom))
-        scaled = get_scaled(self._surf, w, h)
-        sx, sy = camera.world_to_screen(self.x, self.y)
-        surface.blit(scaled, (int(sx - w / 2), int(sy - h / 2)))
-        if self.selected:
-            pygame.draw.rect(surface, (255, 220, 0),
-                             (int(sx - w / 2), int(sy - h / 2), w, h), 2)
-        self.draw_health_bar(surface, camera, width=self.HEALTH_BAR_WIDTH)
-
 
 # ---------------------------------------------------------------------------
 
@@ -78,8 +63,7 @@ class Archery(Building):
 
     def __init__(self, x: float, y: float, team: str):
         super().__init__(x, y, team, max_hp=300)
-        path = f"assets/Buildings/{team.capitalize()} Buildings/Archery.png"
-        self._surf = pygame.image.load(path).convert_alpha()
+        self.sprite_key = f"building/archery/{team}"
 
 
 class Barracks(Building):
@@ -90,8 +74,7 @@ class Barracks(Building):
 
     def __init__(self, x: float, y: float, team: str):
         super().__init__(x, y, team, max_hp=350)
-        path = f"assets/Buildings/{team.capitalize()} Buildings/Barracks.png"
-        self._surf = pygame.image.load(path).convert_alpha()
+        self.sprite_key = f"building/barracks/{team}"
 
 
 class House(Building):
@@ -106,8 +89,7 @@ class House(Building):
     def __init__(self, x: float, y: float, team: str, variant: int = 1):
         super().__init__(x, y, team, max_hp=150)
         n = max(1, min(3, variant))
-        path = f"assets/Buildings/{team.capitalize()} Buildings/House{n}.png"
-        self._surf = pygame.image.load(path).convert_alpha()
+        self.sprite_key = f"building/house{n}/{team}"
 
 
 class Castle(Building):
@@ -121,7 +103,4 @@ class Castle(Building):
 
     def __init__(self, x: float, y: float, team: str):
         super().__init__(x, y, team, max_hp=500)
-        path = f"assets/Buildings/{team.capitalize()} Buildings/Castle.png"
-        self._surf = pygame.image.load(path).convert_alpha()
-
-
+        self.sprite_key = f"building/castle/{team}"

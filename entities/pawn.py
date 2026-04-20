@@ -1,13 +1,36 @@
 import math
-import pygame
+import rendering.entity_renderer as entity_renderer
 from entities.unit import Unit
 from map import TILE_SIZE
 
-ANIM_FPS       = 8
-GATHER_RATE    = 15    # resource units per second
-CARRY_MAX      = 30
+ANIM_FPS        = 8
+GATHER_RATE     = 15    # resource units per second
+CARRY_MAX       = 30
 INTERACT_RADIUS = 60.0
 
+# resource_type → (tool anim suffix, return anim suffix)
+_RESOURCE_TOOL = {
+    "wood": ("axe",     "wood"),
+    "gold": ("pickaxe", "gold"),
+    "meat": ("knife",   "meat"),
+}
+
+# Frame counts per anim key (from sprite sheet widths / 192px frame size)
+_PAWN_FRAME_COUNTS: dict[str, int] = {
+    "idle":             8,
+    "run":              6,
+    "run_axe":          6,
+    "run_pickaxe":      6,
+    "run_knife":        6,
+    "interact_axe":     6,
+    "interact_pickaxe": 6,
+    "interact_knife":   4,
+    "run_wood":         6,
+    "run_gold":         6,
+    "run_meat":         6,
+    "run_hammer":       6,
+    "interact_hammer":  3,
+}
 
 
 def _nearest_walkable_south(col: int, row: int, tile_map) -> tuple[int, int]:
@@ -26,26 +49,18 @@ def _nearest_walkable_south(col: int, row: int, tile_map) -> tuple[int, int]:
     return col, row
 
 
-def _load_sheet(path: str, frame_size: int = 192) -> list[pygame.Surface]:
-    sheet = pygame.image.load(path).convert_alpha()
-    count = sheet.get_width() // frame_size
-    return [
-        sheet.subsurface(pygame.Rect(i * frame_size, 0, frame_size, frame_size))
-        for i in range(count)
-    ]
-
-
 class Pawn(Unit):
     """
     Worker unit.  Assign a gather task with assign_gather(resource_node, castle).
     The pawn will automatically cycle: travel → gather → return → deposit → repeat.
 
-    Sprite selection
-    ----------------
-    Going to resource  : Run Axe / Pickaxe / Knife
-    Gathering          : Interact Axe / Pickaxe / Knife
-    Returning to castle: Run Wood / Gold / Meat
-    Idle               : Idle
+    Anim keys
+    ---------
+    Going to resource  : run_axe / run_pickaxe / run_knife
+    Gathering          : interact_axe / interact_pickaxe / interact_knife
+    Returning to depot : run_wood / run_gold / run_meat
+    Building           : run_hammer / interact_hammer
+    Idle / plain run   : idle / run
     """
 
     FRAME_SIZE      = 192
@@ -54,40 +69,21 @@ class Pawn(Unit):
     DEPOSIT_RADIUS  = 60.0
     SELECT_RADIUS   = 18
 
-    # Maps resource type → (tool_name, return_name)
-    _RESOURCE_SPRITES = {
-        "wood": ("Axe",      "Wood"),
-        "gold": ("Pickaxe",  "Gold"),
-        "meat": ("Knife",    "Meat"),
-    }
-
     def __init__(self, x: float, y: float, team: str = "blue"):
         super().__init__(x, y, team, max_hp=50)
 
-        folder = f"assets/Units/{team.capitalize()} Units/Pawn"
-        fs = self.FRAME_SIZE
-
-        self._frames_idle            = _load_sheet(f"{folder}/Pawn_Idle.png",           fs)
-        self._frames_run             = _load_sheet(f"{folder}/Pawn_Run.png",            fs)
-        self._frames_run_hammer      = _load_sheet(f"{folder}/Pawn_Run Hammer.png",     fs)
-        self._frames_interact_hammer = _load_sheet(f"{folder}/Pawn_Interact Hammer.png", fs)
-
-        # Lazy-loaded per resource type; populated in assign_gather
-        self._frames_to:     list[pygame.Surface] = []
-        self._frames_gather: list[pygame.Surface] = []
-        self._frames_return: list[pygame.Surface] = []
-
-        self._state:       str   = "idle"
-        self._frame_idx:   int   = 0
-        self._anim_timer:  float = 0.0
+        self._state:         str   = "idle"
+        self._anim_key:      str   = "idle"
+        self._frame_idx:     int   = 0
+        self._anim_timer:    float = 0.0
 
         # Gather task
-        self._resource_node = None
-        self._buildings:    tuple = ()
-        self._resource_type: str  = ""
+        self._resource_node  = None
+        self._buildings:     tuple = ()
+        self._resource_type: str   = ""
         self._carried:       float = 0.0
         self._gather_timer:  float = 0.0
-        self._task:          str   = ""    # 'to_resource' | 'gather' | 'to_depot' | 'to_build' | 'build'
+        self._task:          str   = ""    # 'to_resource'|'gather'|'to_depot'|'to_build'|'build'
 
         # Build task
         self._blueprint = None
@@ -98,27 +94,19 @@ class Pawn(Unit):
 
     def assign_build(self, blueprint):
         """Assign this pawn to construct a blueprint."""
-        self._blueprint      = blueprint
-        self._task           = "to_build"
-        self._resource_node  = None
-        self.path            = []
+        self._blueprint     = blueprint
+        self._task          = "to_build"
+        self._resource_node = None
+        self.path           = []
 
     def assign_gather(self, resource_node, buildings):
         """Assign this pawn to gather from resource_node and deposit at the nearest alive depot."""
-        self._resource_node = resource_node
-        self._buildings     = tuple(buildings)
-        self._resource_type = resource_node.resource_type
-
-        folder = f"assets/Units/{self.team.capitalize()} Units/Pawn"
-        fs = self.FRAME_SIZE
-        tool, ret = self._RESOURCE_SPRITES[self._resource_type]
-        self._frames_to     = _load_sheet(f"{folder}/Pawn_Run {tool}.png",      fs)
-        self._frames_gather = _load_sheet(f"{folder}/Pawn_Interact {tool}.png", fs)
-        self._frames_return = _load_sheet(f"{folder}/Pawn_Run {ret}.png",       fs)
-
-        self._carried = 0.0
-        self._task    = "to_resource"
-        self.path     = []
+        self._resource_node  = resource_node
+        self._buildings      = tuple(buildings)
+        self._resource_type  = resource_node.resource_type
+        self._carried        = 0.0
+        self._task           = "to_resource"
+        self.path            = []
 
     # ------------------------------------------------------------------
     # Update  →  returns {'gold': n, 'wood': n, 'meat': n} deposit or {}
@@ -136,7 +124,7 @@ class Pawn(Unit):
                 self._navigate_to(self._resource_node.x, self._resource_node.y,
                                   dt, tile_map, arrive_radius=48.0)
                 dist = math.hypot(self._resource_node.x - self.x,
-                                   self._resource_node.y - self.y)
+                                  self._resource_node.y - self.y)
                 if dist <= 48.0:
                     self._task         = "gather"
                     self._gather_timer = 0.0
@@ -253,32 +241,32 @@ class Pawn(Unit):
             gc, gr = _nearest_walkable_south(gc, gr, tile_map)
         self.path = astar(tile_map, (sc, sr), (gc, gr))
 
+    def _current_anim_key(self) -> str:
+        if self._state == "run_to" and self._resource_type:
+            tool, _ = _RESOURCE_TOOL[self._resource_type]
+            return f"run_{tool}"
+        if self._state == "gather" and self._resource_type:
+            tool, _ = _RESOURCE_TOOL[self._resource_type]
+            return f"interact_{tool}"
+        if self._state == "run_return" and self._resource_type:
+            _, ret = _RESOURCE_TOOL[self._resource_type]
+            return f"run_{ret}"
+        if self._state == "run_to_build": return "run_hammer"
+        if self._state == "build":        return "interact_hammer"
+        if self._state == "run":          return "run"
+        return "idle"
+
     def _tick_animation(self, dt: float):
+        self._anim_key = self._current_anim_key()
         self._anim_timer += dt
         if self._anim_timer >= 1.0 / ANIM_FPS:
             self._anim_timer -= 1.0 / ANIM_FPS
-            frames = self._current_frames()
-            self._frame_idx = (self._frame_idx + 1) % len(frames)
-
-    def _current_frames(self) -> list:
-        if self._state == "run_to"       and self._frames_to:              return self._frames_to
-        if self._state == "gather"       and self._frames_gather:           return self._frames_gather
-        if self._state == "run_return"   and self._frames_return:           return self._frames_return
-        if self._state == "run_to_build":                                   return self._frames_run_hammer
-        if self._state == "build":                                          return self._frames_interact_hammer
-        if self._state == "run":                                            return self._frames_run
-        return self._frames_idle
+            count = _PAWN_FRAME_COUNTS[self._anim_key]
+            self._frame_idx = (self._frame_idx + 1) % count
 
     # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
 
-    def _get_render_frame(self):
-        frames = self._current_frames()
-        return frames[self._frame_idx % len(frames)], not self._facing_right
-
-    def _render_extra(self, surface, camera, sx, sy, size):
-        if self._task == "to_depot" and self._carried > 0:
-            font = pygame.font.SysFont(None, max(12, int(16 * camera.zoom)))
-            label = font.render(str(int(self._carried)), True, (255, 255, 180))
-            surface.blit(label, (int(sx), int(sy - size / 2 - 14 * camera.zoom)))
+    def render(self, surface, camera):
+        entity_renderer.render_pawn(self, surface, camera)

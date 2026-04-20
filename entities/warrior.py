@@ -1,5 +1,4 @@
-import math
-import pygame
+import rendering.entity_renderer as entity_renderer
 from entities.unit import Unit
 
 ANIM_FPS        = 8
@@ -8,14 +7,13 @@ ATTACK_COOLDOWN = 2.0
 HIT_DELAY       = 0.5
 GUARD_DURATION  = 0.5   # how long the guard animation stays visible
 
-
-def _load_sheet(path: str, frame_size: int) -> list[pygame.Surface]:
-    sheet = pygame.image.load(path).convert_alpha()
-    count = sheet.get_width() // frame_size
-    return [
-        sheet.subsurface(pygame.Rect(i * frame_size, 0, frame_size, frame_size))
-        for i in range(count)
-    ]
+_WARRIOR_FRAME_COUNTS: dict[str, int] = {
+    "idle":    8,
+    "run":     6,
+    "attack1": 4,
+    "attack2": 4,
+    "guard":   6,
+}
 
 
 class Warrior(Unit):
@@ -40,26 +38,17 @@ class Warrior(Unit):
     def __init__(self, x: float, y: float, team: str = "blue"):
         super().__init__(x, y, team, max_hp=150)
 
-        folder = f"assets/Units/{team.capitalize()} Units/Warrior"
-        fs = self.FRAME_SIZE
-        self._frames_idle    = _load_sheet(f"{folder}/Warrior_Idle.png",    fs)
-        self._frames_run     = _load_sheet(f"{folder}/Warrior_Run.png",     fs)
-        self._frames_attack  = [
-            _load_sheet(f"{folder}/Warrior_Attack1.png", fs),
-            _load_sheet(f"{folder}/Warrior_Attack2.png", fs),
-        ]
-        self._frames_guard   = _load_sheet(f"{folder}/Warrior_Guard.png",   fs)
-
-        self._state:        str   = "idle"
-        self._frame_idx:    int   = 0
-        self._anim_timer:   float = 0.0
-        self._attack_set:   int   = 0    # alternates 0 / 1
+        self._state:       str   = "idle"
+        self._anim_key:    str   = "idle"
+        self._frame_idx:   int   = 0
+        self._anim_timer:  float = 0.0
+        self._attack_set:  int   = 0    # alternates 0 / 1
 
         self.attack_range: float = self.ATTACK_RANGE
         self._hit_timer:   float = 0.0
 
-        self._guard_ready:    bool  = True    # one block available per attack cycle
-        self._guard_timer:    float = 0.0     # drives guard anim display
+        self._guard_ready: bool  = True    # one block available per attack cycle
+        self._guard_timer: float = 0.0     # drives guard anim display
 
     # ------------------------------------------------------------------
     # Damage interception
@@ -83,8 +72,8 @@ class Warrior(Unit):
     # ------------------------------------------------------------------
 
     def update(self, dt: float, tile_map=None) -> list:
-        self._time        += dt
-        self._guard_timer  = max(0.0, self._guard_timer - dt)
+        self._time       += dt
+        self._guard_timer = max(0.0, self._guard_timer - dt)
 
         if self.attack_target is not None:
             if not self.attack_target.alive:
@@ -133,31 +122,31 @@ class Warrior(Unit):
             self._attack_set     = 1 - self._attack_set
             self._frame_idx      = 0
 
+    def _current_anim_key(self) -> str:
+        if self._guard_timer > 0:
+            return "guard"
+        if self._state == "attack":
+            if self._time - self._last_shot_time < ATTACK_COOLDOWN:
+                return "idle"
+            return f"attack{self._attack_set + 1}"
+        if self._state == "run":
+            return "run"
+        return "idle"
+
     def _tick_animation(self, dt: float):
+        self._anim_key    = self._current_anim_key()
         self._anim_timer += dt
         if self._anim_timer >= 1.0 / ANIM_FPS:
             self._anim_timer -= 1.0 / ANIM_FPS
-            frames = self._current_frames()
-            if self._state == "attack" and self._frame_idx >= len(frames) - 1:
+            count = _WARRIOR_FRAME_COUNTS[self._anim_key]
+            if self._state == "attack" and self._frame_idx >= count - 1:
                 pass  # hold last frame until next swing resets to 0
             else:
-                self._frame_idx = (self._frame_idx + 1) % len(frames)
-
-    def _current_frames(self) -> list:
-        if self._guard_timer > 0:
-            return self._frames_guard
-        if self._state == "attack":
-            if self._time - self._last_shot_time < ATTACK_COOLDOWN:
-                return self._frames_idle
-            return self._frames_attack[self._attack_set]
-        if self._state == "run":
-            return self._frames_run
-        return self._frames_idle
+                self._frame_idx = (self._frame_idx + 1) % count
 
     # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
 
-    def _get_render_frame(self):
-        frames = self._current_frames()
-        return frames[self._frame_idx % len(frames)], not self._facing_right
+    def render(self, surface, camera):
+        entity_renderer.render_warrior(self, surface, camera)

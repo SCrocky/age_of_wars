@@ -1,6 +1,4 @@
-import pygame
 from entities.building import Archery, Barracks, House
-from render_cache import get_scaled
 
 BUILD_RATE = 30.0  # HP-equivalent progress per second per builder
 
@@ -16,13 +14,13 @@ class Blueprint:
     """A building site under construction. Wraps a pre-created building instance."""
 
     def __init__(self, building):
-        self._building  = building
-        self.x          = building.x
-        self.y          = building.y
-        self.team       = building.team
-        self.selected   = False
-        self.alive      = True
-        self.progress   = 0.0
+        self._building   = building
+        self.x           = building.x
+        self.y           = building.y
+        self.team        = building.team
+        self.selected    = False
+        self.alive       = True
+        self.progress    = 0.0
         self.COLLISION_W = building.COLLISION_W
         self.COLLISION_H = building.COLLISION_H
 
@@ -53,25 +51,3 @@ class Blueprint:
         """Mark done and return the finished building."""
         self.alive = False
         return self._building
-
-    def render(self, surface: pygame.Surface, camera):
-        b     = self._building
-        ratio = self.progress / b.max_hp
-
-        w = max(1, int(b.DISPLAY_W * camera.zoom))
-        h = max(1, int(b.DISPLAY_H * camera.zoom))
-        scaled = get_scaled(b._surf, w, h).copy()
-        scaled.set_alpha(int(60 + ratio * 180))
-        sx, sy = camera.world_to_screen(b.x, b.y)
-        surface.blit(scaled, (int(sx - w / 2), int(sy - h / 2)))
-
-        # Construction progress bar
-        bar_w = max(20, int(w * 0.6))
-        bar_h = max(4, int(6 * camera.zoom))
-        bx    = int(sx - bar_w / 2)
-        by    = int(sy - h / 2 - bar_h - 4)
-        pygame.draw.rect(surface, (40, 40, 40),    (bx, by, bar_w, bar_h))
-        fill = int(bar_w * ratio)
-        if fill > 0:
-            pygame.draw.rect(surface, (255, 200, 50), (bx, by, fill,  bar_h))
-        pygame.draw.rect(surface, (0, 0, 0),       (bx, by, bar_w, bar_h), 1)

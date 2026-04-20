@@ -13,7 +13,9 @@ from entities.resource import GoldNode, WoodNode, MeatNode
 from entities.projectile import Arrow
 from entities.blueprint import Blueprint, BUILDABLE
 from systems.pathfinding import astar
-from hud import HUD
+from rendering.hud_renderer import HUD
+import rendering.entity_renderer as entity_renderer
+from rendering.map_renderer import MapRenderer
 
 _BUILDING_CLS = {
     "Castle":   Castle,
@@ -36,8 +38,9 @@ class Game:
         self.w = screen.get_width()
         self.h = screen.get_height()
 
-        self.font = pygame.font.SysFont(None, 22)
-        self.hud  = HUD(self.w, self.h)
+        self.font         = pygame.font.SysFont(None, 22)
+        self.hud          = HUD(self.w, self.h)
+        self._map_renderer = MapRenderer()
 
         self.units:      list           = []
         self.pawns:      list[Pawn]     = []
@@ -383,7 +386,18 @@ class Game:
 
     def update(self, dt: float):
         self._last_dt = dt
-        self.camera.update(dt, self.map.pixel_width, self.map.pixel_height)
+        keys = pygame.key.get_pressed()
+        mx, my = pygame.mouse.get_pos()
+        from camera import InputSnapshot
+        inp = InputSnapshot(
+            pan_left  = bool(keys[pygame.K_LEFT]),
+            pan_right = bool(keys[pygame.K_RIGHT]),
+            pan_up    = bool(keys[pygame.K_UP]),
+            pan_down  = bool(keys[pygame.K_DOWN]),
+            mouse_x   = mx,
+            mouse_y   = my,
+        )
+        self.camera.update(dt, self.map.pixel_width, self.map.pixel_height, inp)
 
         for unit in self.units:
             new_arrows = unit.update(dt, self.map)
@@ -470,16 +484,23 @@ class Game:
 
     def render(self):
         self.screen.fill((10, 20, 40))
-        self.map.render(self.screen, self.camera)
+        self._map_renderer.render(self.map, self.screen, self.camera)
 
         # Y-sort all world objects so lower objects draw on top (painter's algorithm)
         world_objects = self.resources + self.blueprints + self.buildings + self.units + self.pawns
         world_objects.sort(key=lambda obj: obj.sort_y)
         for obj in world_objects:
-            obj.render(self.screen, self.camera)
+            if isinstance(obj, Building):
+                entity_renderer.render_building(obj, self.screen, self.camera)
+            elif isinstance(obj, Blueprint):
+                entity_renderer.render_blueprint(obj, self.screen, self.camera)
+            elif isinstance(obj, (GoldNode, WoodNode, MeatNode)):
+                entity_renderer.render_resource(obj, self.screen, self.camera)
+            else:
+                obj.render(self.screen, self.camera)
 
         for arrow in self.arrows:
-            arrow.render(self.screen, self.camera)
+            entity_renderer.render_arrow(arrow, self.screen, self.camera)
 
         if self._pending_build:
             font = pygame.font.SysFont(None, 28)

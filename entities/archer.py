@@ -1,18 +1,14 @@
-import math
-import pygame
+import rendering.entity_renderer as entity_renderer
 from entities.unit import Unit
 from entities.projectile import Arrow, ARROW_DAMAGE
 
 ANIM_FPS = 8
 
-
-def _load_sheet(path: str, frame_size: int) -> list[pygame.Surface]:
-    sheet = pygame.image.load(path).convert_alpha()
-    count = sheet.get_width() // frame_size
-    return [
-        sheet.subsurface(pygame.Rect(i * frame_size, 0, frame_size, frame_size))
-        for i in range(count)
-    ]
+_ARCHER_FRAME_COUNTS: dict[str, int] = {
+    "idle":   6,
+    "run":    4,
+    "attack": 8,
+}
 
 
 class Archer(Unit):
@@ -28,14 +24,8 @@ class Archer(Unit):
     def __init__(self, x: float, y: float, team: str = "blue"):
         super().__init__(x, y, team, max_hp=80)
 
-        folder = f"assets/Units/{team.capitalize()} Units/Archer"
-        self._frames = {
-            "idle":   _load_sheet(f"{folder}/Archer_Idle.png",  self.FRAME_SIZE),
-            "run":    _load_sheet(f"{folder}/Archer_Run.png",   self.FRAME_SIZE),
-            "attack": _load_sheet(f"{folder}/Archer_Shoot.png", self.FRAME_SIZE),
-        }
-
         self._state:       str   = "idle"
+        self._anim_key:    str   = "idle"
         self._frame_idx:   int   = 0
         self._anim_timer:  float = 0.0
 
@@ -101,19 +91,19 @@ class Archer(Unit):
         return None
 
     def _tick_animation(self, dt: float):
+        self._anim_key    = self._state
         self._anim_timer += dt
         if self._anim_timer >= 1.0 / ANIM_FPS:
             self._anim_timer -= 1.0 / ANIM_FPS
-            frames = self._frames[self._state]
-            if self._state == "attack" and self._frame_idx >= len(frames) - 1:
+            count = _ARCHER_FRAME_COUNTS[self._anim_key]
+            if self._state == "attack" and self._frame_idx >= count - 1:
                 pass  # hold last frame until next shot resets to 0
             else:
-                self._frame_idx = (self._frame_idx + 1) % len(frames)
+                self._frame_idx = (self._frame_idx + 1) % count
 
     # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
 
-    def _get_render_frame(self):
-        frames = self._frames[self._state]
-        return frames[self._frame_idx % len(frames)], not self._facing_right
+    def render(self, surface, camera):
+        entity_renderer.render_archer(self, surface, camera)

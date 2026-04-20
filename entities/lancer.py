@@ -1,40 +1,34 @@
 import math
-import pygame
+import rendering.entity_renderer as entity_renderer
 from entities.unit import Unit
 from map import TILE_SIZE
 
-ANIM_FPS        = 8
-ATTACK_DAMAGE   = 6
-ATTACK_COOLDOWN = 0.3
-HIT_DELAY       = 0.1
+ANIM_FPS         = 8
+ATTACK_DAMAGE    = 6
+ATTACK_COOLDOWN  = 0.3
+HIT_DELAY        = 0.1
 DEFENCE_DURATION = 0.5
 
-
-def _load_sheet(path: str, frame_size: int) -> list[pygame.Surface]:
-    sheet = pygame.image.load(path).convert_alpha()
-    count = sheet.get_width() // frame_size
-    return [
-        sheet.subsurface(pygame.Rect(i * frame_size, 0, frame_size, frame_size))
-        for i in range(count)
-    ]
-
+_LANCER_FRAME_COUNTS: dict[str, int] = {
+    "attack":  3,   # same for all directions
+    "defence": 6,   # same for all directions
+    "idle":    12,
+    "run":     6,
+}
 
 # ---------------------------------------------------------------------------
-# Direction helper
+# Direction helper — pure math, no pygame
 # ---------------------------------------------------------------------------
 
-# The Lancer has 5 sprite directions; left-side directions are the right-side
-# sprites flipped horizontally.
-#
 # Sector mapping (atan2 with y+ = screen-down):
-#   0 = West      → Right, flip=True
-#   1 = NW        → UpRight, flip=True
-#   2 = North     → Up, flip=False
-#   3 = NE        → UpRight, flip=False
-#   4 = East      → Right, flip=False
-#   5 = SE        → DownRight, flip=False
-#   6 = South     → Down, flip=False
-#   7 = SW        → DownRight, flip=True
+#   0 = West   → Right,     flip=True
+#   1 = NW     → UpRight,   flip=True
+#   2 = North  → Up,        flip=False
+#   3 = NE     → UpRight,   flip=False
+#   4 = East   → Right,     flip=False
+#   5 = SE     → DownRight, flip=False
+#   6 = South  → Down,      flip=False
+#   7 = SW     → DownRight, flip=True
 
 _SECTOR_MAP = [
     ("Right",     True),
@@ -49,8 +43,8 @@ _SECTOR_MAP = [
 
 
 def _direction(dx: float, dy: float) -> tuple[str, bool]:
-    """Return (sprite_key, flip_x) for a direction vector."""
-    angle = math.degrees(math.atan2(dy, dx))
+    """Return (dir_key, flip_x) for a direction vector."""
+    angle  = math.degrees(math.atan2(dy, dx))
     sector = int((angle + 180 + 22.5) / 45) % 8
     return _SECTOR_MAP[sector]
 
@@ -80,16 +74,8 @@ class Lancer(Unit):
     def __init__(self, x: float, y: float, team: str = "blue"):
         super().__init__(x, y, team, max_hp=120)
 
-        folder = f"assets/Units/{team.capitalize()} Units/Lancer"
-        fs = self.FRAME_SIZE
-
-        dirs = ("Right", "UpRight", "Up", "Down", "DownRight")
-        self._frames_attack  = {d: _load_sheet(f"{folder}/Lancer_{d}_Attack.png",  fs) for d in dirs}
-        self._frames_defence = {d: _load_sheet(f"{folder}/Lancer_{d}_Defence.png", fs) for d in dirs}
-        self._frames_idle    = _load_sheet(f"{folder}/Lancer_Idle.png", fs)
-        self._frames_run     = _load_sheet(f"{folder}/Lancer_Run.png",  fs)
-
         self._state:       str   = "idle"
+        self._anim_key:    str   = "idle"
         self._frame_idx:   int   = 0
         self._anim_timer:  float = 0.0
 
@@ -115,7 +101,7 @@ class Lancer(Unit):
         dy = attacker.y - self.y
         self._def_dir_key, self._def_flip = _direction(dx, dy)
         self._defence_timer = DEFENCE_DURATION
-        self._frame_idx = 0
+        self._frame_idx     = 0
 
     # ------------------------------------------------------------------
     # Update  →  returns [] (no projectiles; deals damage directly)
@@ -178,38 +164,19 @@ class Lancer(Unit):
             self._frame_idx      = 0
 
     def _tick_animation(self, dt: float):
+        self._anim_key    = self._state
         self._anim_timer += dt
         if self._anim_timer >= 1.0 / ANIM_FPS:
             self._anim_timer -= 1.0 / ANIM_FPS
-            length = self._current_frame_count()
-            if self._state == "attack" and self._frame_idx >= length - 1:
+            count = _LANCER_FRAME_COUNTS[self._anim_key]
+            if self._state == "attack" and self._frame_idx >= count - 1:
                 pass  # hold last frame until next swing resets to 0
             else:
-                self._frame_idx = (self._frame_idx + 1) % length
-
-    def _current_frame_count(self) -> int:
-        if self._state == "attack":
-            return len(self._frames_attack[self._dir_key])
-        if self._state == "defence":
-            return len(self._frames_defence[self._def_dir_key])
-        if self._state == "run":
-            return len(self._frames_run)
-        return len(self._frames_idle)
+                self._frame_idx = (self._frame_idx + 1) % count
 
     # ------------------------------------------------------------------
     # Render
     # ------------------------------------------------------------------
 
-    def _get_render_frame(self) -> tuple[pygame.Surface, bool]:
-        idx = self._frame_idx
-        if self._state == "attack":
-            frames = self._frames_attack[self._dir_key]
-            return frames[idx % len(frames)], self._flip_dir
-        if self._state == "defence":
-            frames = self._frames_defence[self._def_dir_key]
-            return frames[idx % len(frames)], self._def_flip
-        if self._state == "run":
-            frames = self._frames_run
-            return frames[idx % len(frames)], not self._facing_right
-        frames = self._frames_idle
-        return frames[idx % len(frames)], not self._facing_right
+    def render(self, surface, camera):
+        entity_renderer.render_lancer(self, surface, camera)

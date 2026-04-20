@@ -1,5 +1,4 @@
 import math
-import pygame
 import random
 
 TILE_SIZE = 64  # world pixels per tile
@@ -19,57 +18,24 @@ class TileMap:
     GRASS – rendered with a grass terrain tile from the tileset sheet
     """
 
-    # How many columns/rows are in the tileset sheet
-    _SHEET_COLS = 9
-    _SHEET_ROWS = 6
-
     def __init__(self, cols: int, rows: int):
         self.cols = cols
         self.rows = rows
-        self.tiles: list[list[int]] = []
+        self.tiles:   list[list[int]]      = []
         self.blocked: set[tuple[int, int]] = set()
-        self._tile_cache: pygame.Surface | None = None
-
-        self._load_sprites()
+        self._tiles_dirty: bool            = True
         self._generate()
 
     @classmethod
     def from_data(cls, cols: int, rows: int, tiles: list[list[int]]) -> "TileMap":
         """Create a TileMap from a pre-built tile grid (skips procedural generation)."""
         obj = object.__new__(cls)
-        obj.cols = cols
-        obj.rows = rows
-        obj.tiles = [list(row) for row in tiles]
-        obj.blocked = set()
-        obj._tile_cache = None
-        obj._load_sprites()
+        obj.cols          = cols
+        obj.rows          = rows
+        obj.tiles         = [list(row) for row in tiles]
+        obj.blocked       = set()
+        obj._tiles_dirty  = True
         return obj
-
-    # ------------------------------------------------------------------
-    # Asset loading
-    # ------------------------------------------------------------------
-
-    def _load_sprites(self):
-        self._water_tile = pygame.image.load(
-            "assets/Terrain/Tileset/Water Background color.png"
-        ).convert_alpha()
-
-        # The tileset sheet contains organic terrain CHUNKS (not solid square ground
-        # tiles).  We use them as decorations drawn on top of solid colour fills.
-        sheet = pygame.image.load(
-            "assets/Terrain/Tileset/Tilemap_color1.png"
-        ).convert_alpha()
-        self._sheet_tiles: list[pygame.Surface] = []
-        for row in range(self._SHEET_ROWS):
-            for col in range(self._SHEET_COLS):
-                tile = sheet.subsurface(
-                    pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-                )
-                self._sheet_tiles.append(tile)
-
-        # Solid base colours
-        self._grass_colour = (106, 153, 56)   # muted green
-        self._water_colour = (56, 120, 153)   # muted blue (matches water sprite)
 
     # ------------------------------------------------------------------
     # Map generation
@@ -77,7 +43,7 @@ class TileMap:
 
     def _generate(self):
         """Generate a simple island: grass in the interior, water on the border."""
-        border = 3  # water border thickness in tiles
+        border = 3
 
         self.tiles = []
         for row in range(self.rows):
@@ -94,7 +60,6 @@ class TileMap:
                     tile_row.append(GRASS)
             self.tiles.append(tile_row)
 
-        # Scatter some water "lakes" inside the island for variety
         rng = random.Random()
         for _ in range(8):
             lx = rng.randint(border + 1, self.cols - border - 4)
@@ -137,7 +102,7 @@ class TileMap:
                 col, row = cx + dc, cy + dr
                 if 0 <= col < self.cols and 0 <= row < self.rows:
                     self.tiles[row][col] = GRASS
-        self._tile_cache = None
+        self._tiles_dirty = True
 
     def block_area(self, world_x: float, world_y: float, half_w: int, half_h: int):
         """Mark a rectangular tile area as unwalkable without changing its visual."""
@@ -182,47 +147,3 @@ class TileMap:
             col, row = cx + dc, cy + dr
             if 0 <= col < self.cols and 0 <= row < self.rows:
                 self.blocked.add((col, row))
-
-    # ------------------------------------------------------------------
-    # Rendering
-    # ------------------------------------------------------------------
-
-    def _build_tile_cache(self):
-        """Pre-render all tiles into a full-resolution Surface (zoom=1.0)."""
-        surf = pygame.Surface((self.pixel_width, self.pixel_height))
-        for row in range(self.rows):
-            for col in range(self.cols):
-                x = col * TILE_SIZE
-                y = row * TILE_SIZE
-                if self.tiles[row][col] == WATER:
-                    surf.blit(self._water_tile, (x, y))
-                else:
-                    # +1 to eliminate sub-pixel gaps when scaled
-                    pygame.draw.rect(surf, self._grass_colour,
-                                     (x, y, TILE_SIZE + 1, TILE_SIZE + 1))
-        self._tile_cache = surf
-
-    def render(self, surface: pygame.Surface, camera):
-        if self._tile_cache is None:
-            self._build_tile_cache()
-
-        zoom = camera.zoom
-        sw = surface.get_width()
-        sh = surface.get_height()
-
-        # Visible world region (clamped to map bounds)
-        src_x = max(0, int(camera.x))
-        src_y = max(0, int(camera.y))
-        src_x2 = min(self.pixel_width,  int(math.ceil(camera.x + sw / zoom)) + 1)
-        src_y2 = min(self.pixel_height, int(math.ceil(camera.y + sh / zoom)) + 1)
-        src_w = max(1, src_x2 - src_x)
-        src_h = max(1, src_y2 - src_y)
-
-        # Destination on screen (offset accounts for sub-pixel camera position)
-        dst_x = int((src_x - camera.x) * zoom)
-        dst_y = int((src_y - camera.y) * zoom)
-        dst_w = max(1, int(src_w * zoom))
-        dst_h = max(1, int(src_h * zoom))
-
-        sub = self._tile_cache.subsurface((src_x, src_y, src_w, src_h))
-        surface.blit(pygame.transform.scale(sub, (dst_w, dst_h)), (dst_x, dst_y))
