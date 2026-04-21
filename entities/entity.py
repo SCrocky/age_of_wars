@@ -2,6 +2,7 @@ class Entity:
     """Base class for all game objects with a world position and health."""
 
     def __init__(self, x: float, y: float, team: str, max_hp: int = 100):
+        self.entity_id: int = 0
         self.x = x          # world-space centre
         self.y = y
         self.team = team    # e.g. 'blue', 'black'

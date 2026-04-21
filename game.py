@@ -33,7 +33,7 @@ DRAG_THRESHOLD = 5
 
 
 class Game:
-    def __init__(self, screen: pygame.Surface, scene_path: str):
+    def __init__(self, screen: pygame.Surface, scene_path: str, headless: bool = False):
         self.screen = screen
         self.w = screen.get_width()
         self.h = screen.get_height()
@@ -54,6 +54,8 @@ class Game:
             "black": {"gold": 60, "wood": 60, "meat": 60, "pop": 0, "pop_cap": 0},
         }
 
+        self.headless: bool = headless
+        self._next_entity_id: int = 1
         self._load_scene(scene_path)
 
         self._drag_start: tuple[int, int] | None = None
@@ -65,6 +67,11 @@ class Game:
     # ------------------------------------------------------------------
     # Setup
     # ------------------------------------------------------------------
+
+    def _assign_id(self, entity):
+        entity.entity_id = self._next_entity_id
+        self._next_entity_id += 1
+        return entity
 
     def _center_camera(self):
         self.camera = Camera(self.w, self.h)
@@ -85,7 +92,7 @@ class Game:
             kw = {}
             if b_data["type"] == "House":
                 kw["variant"] = b_data.get("variant", 1)
-            building = cls(b_data["x"], b_data["y"], team=b_data["team"], **kw)
+            building = self._assign_id(cls(b_data["x"], b_data["y"], team=b_data["team"], **kw))
             self.map.clear_area(building.x, building.y, tile_radius=4)
             building.on_place(self.map)
             self.buildings.append(building)
@@ -93,21 +100,21 @@ class Game:
         for u_data in scene.get("units", []):
             x, y, team = u_data["x"], u_data["y"], u_data["team"]
             if u_data["type"] == "Pawn":
-                self.pawns.append(Pawn(x, y, team=team))
+                self.pawns.append(self._assign_id(Pawn(x, y, team=team)))
             else:
                 cls = _UNIT_CLS.get(u_data["type"])
                 if cls:
-                    self.units.append(cls(x, y, team=team))
+                    self.units.append(self._assign_id(cls(x, y, team=team)))
 
         for r_data in scene.get("resources", []):
             x, y, variant = r_data["x"], r_data["y"], r_data.get("variant", 0)
             rtype = r_data["type"]
             if rtype == "wood":
-                self.resources.append(WoodNode(x, y, variant=variant))
+                self.resources.append(self._assign_id(WoodNode(x, y, variant=variant)))
             elif rtype == "gold":
-                self.resources.append(GoldNode(x, y, variant=variant))
+                self.resources.append(self._assign_id(GoldNode(x, y, variant=variant)))
             elif rtype == "meat":
-                self.resources.append(MeatNode(x, y))
+                self.resources.append(self._assign_id(MeatNode(x, y)))
 
     # ------------------------------------------------------------------
     # Helpers
@@ -208,12 +215,12 @@ class Game:
             if x1 <= ux <= x2 and y1 <= uy <= y2:
                 u.selected = True
 
-    def _handle_spawn_archer(self):
-        eco = self.economy["blue"]
+    def _handle_spawn_archer(self, team: str = "blue", building=None):
+        eco = self.economy[team]
         if eco["wood"] < 15 or eco["meat"] < 30 or eco["pop"] >= eco["pop_cap"]:
             return
-        archery = next(
-            (b for b in self.buildings if b.team == "blue"
+        archery = building or next(
+            (b for b in self.buildings if b.team == team
              and b.selected and b.alive and isinstance(b, Archery)),
             None,
         )
@@ -222,18 +229,18 @@ class Game:
         eco["wood"] -= 15
         eco["meat"] -= 30
         angle = random.uniform(0, 2 * math.pi)
-        self.units.append(Archer(
+        self.units.append(self._assign_id(Archer(
             archery.x + math.cos(angle) * 120,
             archery.y + math.sin(angle) * 120,
-            team="blue",
-        ))
+            team=team,
+        )))
 
-    def _handle_spawn_pawn(self):
-        eco = self.economy["blue"]
+    def _handle_spawn_pawn(self, team: str = "blue", building=None):
+        eco = self.economy[team]
         if eco["meat"] < 20 or eco["pop"] >= eco["pop_cap"]:
             return
-        castle = next(
-            (b for b in self.buildings if b.team == "blue" and b.selected and b.alive),
+        castle = building or next(
+            (b for b in self.buildings if b.team == team and b.selected and b.alive),
             None,
         )
         if castle is None:
@@ -243,15 +250,15 @@ class Game:
         dist  = 120
         px    = castle.x + math.cos(angle) * dist
         py    = castle.y + math.sin(angle) * dist
-        pawn  = Pawn(px, py, team="blue")
+        pawn  = self._assign_id(Pawn(px, py, team=team))
         self.pawns.append(pawn)
 
-    def _handle_spawn_lancer(self):
-        eco = self.economy["blue"]
+    def _handle_spawn_lancer(self, team: str = "blue", building=None):
+        eco = self.economy[team]
         if eco["wood"] < 45 or eco["meat"] < 10 or eco["pop"] >= eco["pop_cap"]:
             return
-        barracks = next(
-            (b for b in self.buildings if b.team == "blue"
+        barracks = building or next(
+            (b for b in self.buildings if b.team == team
              and b.selected and b.alive and isinstance(b, Barracks)),
             None,
         )
@@ -260,18 +267,18 @@ class Game:
         eco["wood"] -= 45
         eco["meat"] -= 10
         angle = random.uniform(0, 2 * math.pi)
-        self.units.append(Lancer(
+        self.units.append(self._assign_id(Lancer(
             barracks.x + math.cos(angle) * 120,
             barracks.y + math.sin(angle) * 120,
-            team="blue",
-        ))
+            team=team,
+        )))
 
-    def _handle_spawn_warrior(self):
-        eco = self.economy["blue"]
+    def _handle_spawn_warrior(self, team: str = "blue", building=None):
+        eco = self.economy[team]
         if eco["gold"] < 35 or eco["meat"] < 40 or eco["pop"] >= eco["pop_cap"]:
             return
-        barracks = next(
-            (b for b in self.buildings if b.team == "blue"
+        barracks = building or next(
+            (b for b in self.buildings if b.team == team
              and b.selected and b.alive and isinstance(b, Barracks)),
             None,
         )
@@ -280,11 +287,11 @@ class Game:
         eco["gold"] -= 35
         eco["meat"] -= 40
         angle = random.uniform(0, 2 * math.pi)
-        self.units.append(Warrior(
+        self.units.append(self._assign_id(Warrior(
             barracks.x + math.cos(angle) * 120,
             barracks.y + math.sin(angle) * 120,
-            team="blue",
-        ))
+            team=team,
+        )))
 
     def _place_blueprint(self, screen_pos):
         name = self._pending_build
@@ -299,7 +306,7 @@ class Game:
         wx, wy = self.camera.screen_to_world(sx, sy)
         building = cls(wx, wy, team="blue")
         self.map.clear_area(wx, wy, tile_radius=4)
-        bp = Blueprint(building)
+        bp = self._assign_id(Blueprint(building))
         self.blueprints.append(bp)
         for pawn in self.pawns:
             if pawn.selected and pawn.team == "blue":
@@ -386,27 +393,30 @@ class Game:
 
     def update(self, dt: float):
         self._last_dt = dt
-        keys = pygame.key.get_pressed()
-        mx, my = pygame.mouse.get_pos()
-        from camera import InputSnapshot
-        inp = InputSnapshot(
-            pan_left  = bool(keys[pygame.K_LEFT]),
-            pan_right = bool(keys[pygame.K_RIGHT]),
-            pan_up    = bool(keys[pygame.K_UP]),
-            pan_down  = bool(keys[pygame.K_DOWN]),
-            mouse_x   = mx,
-            mouse_y   = my,
-        )
-        self.camera.update(dt, self.map.pixel_width, self.map.pixel_height, inp)
+        if not self.headless:
+            keys = pygame.key.get_pressed()
+            mx, my = pygame.mouse.get_pos()
+            from camera import InputSnapshot
+            inp = InputSnapshot(
+                pan_left  = bool(keys[pygame.K_LEFT]),
+                pan_right = bool(keys[pygame.K_RIGHT]),
+                pan_up    = bool(keys[pygame.K_UP]),
+                pan_down  = bool(keys[pygame.K_DOWN]),
+                mouse_x   = mx,
+                mouse_y   = my,
+            )
+            self.camera.update(dt, self.map.pixel_width, self.map.pixel_height, inp)
 
         for unit in self.units:
             new_arrows = unit.update(dt, self.map)
+            for arrow in new_arrows:
+                self._assign_id(arrow)
             self.arrows.extend(new_arrows)
 
         for pawn in self.pawns:
             deposit = pawn.update(dt, self.map)
             for resource_type, amount in deposit.items():
-                self.economy["blue"][resource_type] += amount
+                self.economy[pawn.team][resource_type] += amount
 
         for arrow in self.arrows:
             arrow.update(dt)
@@ -421,7 +431,7 @@ class Game:
         next_blueprints = []
         for bp in self.blueprints:
             if bp.alive and bp.progress >= bp.max_hp:
-                building = bp.complete()
+                building = self._assign_id(bp.complete())
                 building.on_place(self.map)
                 next_buildings.append(building)
             elif bp.alive:

@@ -169,13 +169,14 @@ class HUD:
     # Public interface
     # ------------------------------------------------------------------
 
-    def draw(self, surface: pygame.Surface, economy: dict, all_entities: list):
+    def draw(self, surface: pygame.Surface, economy: dict, all_entities: list,
+             player_team: str = "blue"):
         self._buttons = []
-        self._draw_resources(surface, economy["blue"])
+        self._draw_resources(surface, economy[player_team])
         selected = [e for e in all_entities
-                    if e.selected and getattr(e, "team", None) == "blue"]
+                    if e.selected and getattr(e, "team", None) == player_team]
         if selected:
-            self._draw_selection(surface, selected, economy["blue"])
+            self._draw_selection(surface, selected, economy[player_team])
 
     def handle_click(self, mx: int, my: int) -> str | None:
         """Return the action string of the button clicked, or None."""

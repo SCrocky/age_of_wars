@@ -18,6 +18,7 @@ class ResourceNode:
     max_amount:    int = 200
 
     def __init__(self, x: float, y: float):
+        self.entity_id: int = 0
         self.x = x
         self.y = y
         self.amount       = self.max_amount

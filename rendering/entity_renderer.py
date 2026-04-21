@@ -205,13 +205,17 @@ def _get_sheep_frames(state: str) -> list[pygame.Surface]:
 
 
 def render_resource(node, surface: pygame.Surface, camera) -> None:
-    from entities.resource import GoldNode, WoodNode, MeatNode
-    if isinstance(node, GoldNode):
-        _render_gold(node, surface, camera)
-    elif isinstance(node, WoodNode):
-        _render_wood(node, surface, camera)
-    elif isinstance(node, MeatNode):
-        _render_meat(node, surface, camera)
+    # Support duck-typed proxies that expose a resource_type attribute
+    res_type = getattr(node, "resource_type", None)
+    if res_type is None:
+        from entities.resource import GoldNode, WoodNode, MeatNode
+        if isinstance(node, GoldNode):   res_type = "gold"
+        elif isinstance(node, WoodNode): res_type = "wood"
+        elif isinstance(node, MeatNode): res_type = "meat"
+
+    if res_type == "gold":   _render_gold(node, surface, camera)
+    elif res_type == "wood": _render_wood(node, surface, camera)
+    elif res_type == "meat": _render_meat(node, surface, camera)
 
 
 def _render_gold(node, surface: pygame.Surface, camera) -> None:

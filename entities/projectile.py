@@ -9,6 +9,7 @@ class Arrow:
     """A projectile fired by an Archer at a target entity."""
 
     def __init__(self, x: float, y: float, target, damage: int, team: str):
+        self.entity_id: int = 0
         self.x      = x
         self.y      = y
         self.target = target   # Entity reference — we home on it
