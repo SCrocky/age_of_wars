@@ -50,8 +50,8 @@ class Game:
         self.resources:  list           = []
 
         self.economy: dict[str, dict[str, int]] = {
-            "blue":  {"gold": 0, "wood": 0, "meat": 0, "pop": 0, "pop_cap": 0},
-            "black": {"gold": 0, "wood": 0, "meat": 0, "pop": 0, "pop_cap": 0},
+            "blue":  {"gold": 60, "wood": 60, "meat": 60, "pop": 0, "pop_cap": 0},
+            "black": {"gold": 60, "wood": 60, "meat": 60, "pop": 0, "pop_cap": 0},
         }
 
         self._load_scene(scene_path)
