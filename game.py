@@ -486,8 +486,20 @@ class Game:
         self.screen.fill((10, 20, 40))
         self._map_renderer.render(self.map, self.screen, self.camera)
 
+        # Frustum cull: skip objects entirely outside the visible world rectangle.
+        cam     = self.camera
+        margin  = 200  # world-px margin to avoid pop-in for large sprites
+        vx0     = cam.x - margin
+        vy0     = cam.y - margin
+        vx1     = cam.x + self.w / cam.zoom + margin
+        vy1     = cam.y + self.h / cam.zoom + margin
+
         # Y-sort all world objects so lower objects draw on top (painter's algorithm)
-        world_objects = self.resources + self.blueprints + self.buildings + self.units + self.pawns
+        world_objects = [
+            obj for obj in
+            self.resources + self.blueprints + self.buildings + self.units + self.pawns
+            if vx0 <= obj.x <= vx1 and vy0 <= obj.y <= vy1
+        ]
         world_objects.sort(key=lambda obj: obj.sort_y)
         for obj in world_objects:
             if isinstance(obj, Building):

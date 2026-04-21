@@ -22,12 +22,14 @@ class Unit(Entity):
         self._chase_timer:    float = 0.0
         self._facing_right:   bool  = True
         self._arrival_offset: tuple[float, float] = (0.0, 0.0)
+        self._path_future = None   # pending async A* result
 
     # ------------------------------------------------------------------
     # Commands
     # ------------------------------------------------------------------
 
     def set_path(self, path: list[tuple[int, int]]):
+        self._path_future = None   # discard any pending repath
         self.path = list(path)
         self.attack_target = None
         if path:
@@ -36,6 +38,7 @@ class Unit(Entity):
             self._arrival_offset = (0.0, 0.0)
 
     def set_attack_target(self, target):
+        self._path_future = None
         self.attack_target = target
         self.path = []
 
@@ -76,6 +79,17 @@ class Unit(Entity):
             if self._chase_timer <= 0:
                 self._chase_timer = self.CHASE_INTERVAL
                 self._repath_to_target(tile_map)
+
+        # Apply completed async path result
+        if self._path_future is not None and self._path_future.done():
+            try:
+                result = self._path_future.result()
+                if result:
+                    self.path = result
+            except Exception:
+                pass
+            self._path_future = None
+
         if self.path:
             self._move_along_path(dt)
         elif self.attack_target:
@@ -90,7 +104,7 @@ class Unit(Entity):
                     self._facing_right = dx > 0
 
     def _repath_to_target(self, tile_map):
-        from systems.pathfinding import astar
+        from systems.pathfinding import submit_astar
         sc = int(self.x // TILE_SIZE)
         sr = int(self.y // TILE_SIZE)
         get_point = getattr(self.attack_target, 'sprite_closest_point', self.attack_target.closest_point)
@@ -98,7 +112,7 @@ class Unit(Entity):
         gc = int(tx // TILE_SIZE)
         gr = int(ty // TILE_SIZE)
         gc, gr = tile_map.nearest_walkable(gc, gr)
-        self.path = astar(tile_map, (sc, sr), (gc, gr))
+        self._path_future = submit_astar(tile_map, (sc, sr), (gc, gr))
 
     @property
     def sort_y(self) -> float:

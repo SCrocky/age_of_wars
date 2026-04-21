@@ -64,6 +64,8 @@ def main():
         game.render()
         pygame.display.flip()
 
+    from systems.pathfinding import shutdown_path_pool
+    shutdown_path_pool()
     pygame.quit()
 
 

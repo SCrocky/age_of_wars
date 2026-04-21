@@ -17,6 +17,8 @@ class MapRenderer:
         self._water_tile:  pygame.Surface | None   = None
         self._sheet_tiles: list[pygame.Surface]    = []
         self._loaded = False
+        self._vp_key:  tuple | None          = None
+        self._vp_surf: pygame.Surface | None = None
 
     # ------------------------------------------------------------------
 
@@ -51,8 +53,9 @@ class MapRenderer:
                     # +1 to eliminate sub-pixel gaps when scaled
                     pygame.draw.rect(surf, self._GRASS_COLOR,
                                      (x, y, TILE_SIZE + 1, TILE_SIZE + 1))
-        self._tile_cache       = surf
-        tile_map._tiles_dirty  = False
+        self._tile_cache      = surf
+        tile_map._tiles_dirty = False
+        self._vp_key          = None  # invalidate viewport cache
 
     # ------------------------------------------------------------------
 
@@ -79,5 +82,9 @@ class MapRenderer:
         dst_w = max(1, int(src_w * zoom))
         dst_h = max(1, int(src_h * zoom))
 
-        sub = self._tile_cache.subsurface((src_x, src_y, src_w, src_h))
-        surface.blit(pygame.transform.scale(sub, (dst_w, dst_h)), (dst_x, dst_y))
+        vp_key = (src_x, src_y, src_w, src_h, dst_w, dst_h)
+        if vp_key != self._vp_key:
+            sub = self._tile_cache.subsurface((src_x, src_y, src_w, src_h))
+            self._vp_surf = pygame.transform.scale(sub, (dst_w, dst_h))
+            self._vp_key  = vp_key
+        surface.blit(self._vp_surf, (dst_x, dst_y))
