@@ -4,20 +4,20 @@ import assets
 _UI = "assets/UI Elements/UI Elements"
 
 _AVATAR_IDX: dict[tuple[str, str], int] = {
-    ("Archer",   "blue"):  2,
-    ("Lancer",   "blue"):  3,
-    ("Warrior",  "blue"):  2,
-    ("Pawn",     "blue"):  4,
-    ("Castle",   "blue"):  1,
-    ("Archery",  "blue"):  2,
-    ("Barracks", "blue"):  3,
-    ("Archer",   "black"): 7,
-    ("Lancer",   "black"): 8,
-    ("Warrior",  "black"): 7,
-    ("Pawn",     "black"): 4,
-    ("Castle",   "black"): 6,
-    ("Archery",  "black"): 7,
-    ("Barracks", "black"): 8,
+    ("Warrior",  "blue"):  1,
+    ("Lancer",   "blue"):  2,
+    ("Archer",   "blue"):  3,
+    ("Pawn",     "blue"):  5,
+    ("Castle",   "blue"):  5,
+    ("Archery",  "blue"):  3,
+    ("Barracks", "blue"):  1,
+    ("Warrior",  "black"): 21,
+    ("Lancer",   "black"): 22,
+    ("Archer",   "black"): 23,
+    ("Pawn",     "black"): 25,
+    ("Castle",   "black"): 25,
+    ("Archery",  "black"): 23,
+    ("Barracks", "black"): 21,
 }
 
 PAWN_COST    = {"meat": 20}
