@@ -18,7 +18,7 @@ from camera import Camera, InputSnapshot
 from map import TileMap, TILE_SIZE
 from rendering.map_renderer import MapRenderer
 from rendering.hud_renderer import HUD
-from pygame._sdl2.video import Window
+
 import rendering.entity_renderer as entity_renderer
 import texture_cache
 from network.render_proxy import EntityProxy, make_proxy
@@ -29,9 +29,8 @@ DRAG_THRESHOLD = 5
 
 
 class ClientGame:
-    def __init__(self, renderer: Renderer, window: Window, scene: dict, player_team: str):
+    def __init__(self, renderer: Renderer, scene: dict, player_team: str):
         self.renderer    = renderer
-        self._phys_size  = window.size
         self.w           = 1600
         self.h           = 900
         self.player_team = player_team
@@ -69,6 +68,7 @@ class ClientGame:
         self._drag_start: tuple[int, int] | None = None
         self._dragging:   bool = False
         self._pending_build: str | None = None
+        self._current_mouse_pos: tuple[int, int] = (0, 0)
         self.debug: bool = False
 
         self.fog = FogOfWar(self.map.rows, self.map.cols)
@@ -204,6 +204,9 @@ class ClientGame:
         if self._winner:
             return
 
+        if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+            self._current_mouse_pos = event.pos
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 if self._pending_build:
@@ -216,7 +219,7 @@ class ClientGame:
                 self._show_debug = not self._show_debug
 
         elif event.type == pygame.MOUSEWHEEL:
-            mx, my = pygame.mouse.get_pos()
+            mx, my = self._current_mouse_pos
             self.camera.zoom_at(mx, my, event.y)
             self.hud.on_zoom_changed()
 
@@ -259,7 +262,7 @@ class ClientGame:
 
     def update(self, dt: float):
         keys = pygame.key.get_pressed()
-        mx, my = pygame.mouse.get_pos()
+        mx, my = self._current_mouse_pos
         inp = InputSnapshot(
             pan_left  = bool(keys[pygame.K_LEFT]),
             pan_right = bool(keys[pygame.K_RIGHT]),
@@ -496,12 +499,8 @@ class ClientGame:
     def _draw_drag_box(self):
         if not self._dragging or not self._drag_start:
             return
-        pw, ph = self._phys_size
-        lw, lh = self.renderer.logical_size
-        def to_logical(x, y):
-            return int(x * lw / pw), int(y * lh / ph)
-        mx, my  = to_logical(*pygame.mouse.get_pos())
-        sx, sy  = to_logical(*self._drag_start)
+        mx, my = self._current_mouse_pos
+        sx, sy = self._drag_start
         x1 = min(sx, mx)
         y1 = min(sy, my)
         w  = abs(mx - sx)

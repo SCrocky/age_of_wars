@@ -161,7 +161,7 @@ def main():
 
     # Create client game
     from client_game import ClientGame
-    game = ClientGame(renderer, window, scene, player_team)
+    game = ClientGame(renderer, scene, player_team)
 
     # Main loop
     running = True
