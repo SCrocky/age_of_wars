@@ -1,4 +1,3 @@
-import rendering.entity_renderer as entity_renderer
 from entities.combat_unit import CombatUnit
 from entities.projectile import Arrow, ARROW_DAMAGE
 
@@ -44,6 +43,3 @@ class Archer(CombatUnit):
             return Arrow(self.x, self.y, self.attack_target, ARROW_DAMAGE, self.team)
 
         return None
-
-    def render(self, surface, camera):
-        entity_renderer.render_archer(self, surface, camera)

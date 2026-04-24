@@ -1,5 +1,4 @@
 import math
-import rendering.entity_renderer as entity_renderer
 from entities.combat_unit import CombatUnit
 
 ATTACK_DAMAGE    = 6
@@ -117,9 +116,3 @@ class Lancer(CombatUnit):
             self._frame_idx      = 0
         return None
 
-    # ------------------------------------------------------------------
-    # Render
-    # ------------------------------------------------------------------
-
-    def render(self, surface, camera):
-        entity_renderer.render_lancer(self, surface, camera)

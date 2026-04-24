@@ -1,4 +1,3 @@
-import rendering.entity_renderer as entity_renderer
 from entities.combat_unit import CombatUnit
 
 ATTACK_DAMAGE   = 25
@@ -91,9 +90,3 @@ class Warrior(CombatUnit):
             return "run"
         return "idle"
 
-    # ------------------------------------------------------------------
-    # Render
-    # ------------------------------------------------------------------
-
-    def render(self, surface, camera):
-        entity_renderer.render_warrior(self, surface, camera)

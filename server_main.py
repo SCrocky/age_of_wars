@@ -41,16 +41,11 @@ def _generate_scene() -> str:
 
 
 async def main(scene_path: str, host: str, port: int):
-    from network.headless import init_headless
-    init_headless()
-    import pygame
-    screen = pygame.display.set_mode((1, 1))
-
     from network.lobby import wait_for_players
     from network.server import GameServer
 
     players = await wait_for_players(host, port, scene_path)
-    server = GameServer(screen, scene_path)
+    server = GameServer(scene_path)
     print("[server] Starting game…")
     await server.run(players)
     print("[server] Game over.")

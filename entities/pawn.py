@@ -1,6 +1,5 @@
 import enum
 import math
-import rendering.entity_renderer as entity_renderer
 from entities.unit import Unit
 from map import TILE_SIZE
 
@@ -271,9 +270,3 @@ class Pawn(Unit):
             count = _PAWN_FRAME_COUNTS[self._anim_key]
             self._frame_idx = (self._frame_idx + 1) % count
 
-    # ------------------------------------------------------------------
-    # Render
-    # ------------------------------------------------------------------
-
-    def render(self, surface, camera):
-        entity_renderer.render_pawn(self, surface, camera)
