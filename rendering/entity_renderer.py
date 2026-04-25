@@ -13,13 +13,14 @@ import assets
 _building_surfs: dict[str, pygame.Surface] = {}
 
 _BUILDING_FILENAMES: dict[str, str] = {
-    "archery":  "Archery.png",
-    "barracks": "Barracks.png",
-    "castle":   "Castle.png",
-    "house1":   "House1.png",
-    "house2":   "House2.png",
-    "house3":   "House3.png",
-    "tower":    "Tower.png",
+    "archery":   "Archery.png",
+    "barracks":  "Barracks.png",
+    "castle":    "Castle.png",
+    "house1":    "House1.png",
+    "house2":    "House2.png",
+    "house3":    "House3.png",
+    "tower":     "Tower.png",
+    "monastery": "Monastery.png",
 }
 
 
@@ -81,7 +82,9 @@ def render_building(building, renderer: Renderer, camera) -> None:
     w = max(1, int(building.DISPLAY_W * camera.zoom))
     h = max(1, int(building.DISPLAY_H * camera.zoom))
     sx, sy = camera.world_to_screen(building.x, building.y)
-    get_texture(surf).draw(dstrect=(int(sx - w / 2), int(sy - h / 2), w, h))
+    tex = get_texture(surf)
+    tex.alpha = 255
+    tex.draw(dstrect=(int(sx - w / 2), int(sy - h / 2), w, h))
     if building.selected:
         renderer.draw_blend_mode = pygame.BLENDMODE_NONE
         renderer.draw_color = (255, 220, 0, 255)
@@ -472,3 +475,60 @@ def render_warrior(warrior, renderer: Renderer, camera) -> None:
         r = max(2, int(warrior.SELECT_RADIUS * camera.zoom))
         draw_selection_circle(renderer, int(sx), int(sy), r)
     draw_health_bar(warrior, renderer, camera)
+
+
+# ---------------------------------------------------------------------------
+# Monk renderer
+# ---------------------------------------------------------------------------
+
+_MONK_FILENAMES: dict[str, str] = {
+    "idle": "Idle.png",
+    "run":  "Run.png",
+    "heal": "Heal.png",
+}
+
+_monk_frames:       dict[tuple[str, str], list[pygame.Surface]] = {}
+_heal_effect_frames: dict[str, list[pygame.Surface]]            = {}
+
+
+def _get_monk_frames(team: str, anim_key: str) -> list[pygame.Surface]:
+    key = (team, anim_key)
+    frames = _monk_frames.get(key)
+    if frames is None:
+        path   = f"assets/Units/{team.capitalize()} Units/Monk/{_MONK_FILENAMES[anim_key]}"
+        frames = _load_sheet(path, 192)
+        _monk_frames[key] = frames
+    return frames
+
+
+def _get_heal_effect_frames(team: str) -> list[pygame.Surface]:
+    frames = _heal_effect_frames.get(team)
+    if frames is None:
+        path   = f"assets/Units/{team.capitalize()} Units/Monk/Heal_Effect.png"
+        frames = _load_sheet(path, 192)
+        _heal_effect_frames[team] = frames
+    return frames
+
+
+def render_monk(monk, renderer: Renderer, camera) -> None:
+    frames = _get_monk_frames(monk.team, monk._anim_key)
+    frame  = frames[monk._frame_idx % len(frames)]
+    size   = max(1, int(monk.DISPLAY_SIZE * camera.zoom))
+    sx, sy = camera.world_to_screen(monk.x, monk.y)
+    get_texture(frame).draw(
+        dstrect=(int(sx - size / 2), int(sy - size / 2), size, size),
+        flip_x=not monk._facing_right,
+    )
+    if monk.selected:
+        r = max(2, int(monk.SELECT_RADIUS * camera.zoom))
+        draw_selection_circle(renderer, int(sx), int(sy), r)
+    draw_health_bar(monk, renderer, camera)
+
+
+def render_heal_effect(target, frame_idx: int, monk_team: str,
+                       renderer: Renderer, camera) -> None:
+    frames = _get_heal_effect_frames(monk_team)
+    frame  = frames[frame_idx % len(frames)]
+    size   = max(1, int(getattr(target, "DISPLAY_SIZE", 128) * camera.zoom))
+    sx, sy = camera.world_to_screen(target.x, target.y)
+    get_texture(frame).draw(dstrect=(int(sx - size / 2), int(sy - size / 2), size, size))

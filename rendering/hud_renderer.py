@@ -34,19 +34,21 @@ _AVATAR_IDX: dict[tuple[str, str], int] = {
     ("Tower",    "black"): 23,
 }
 
-PAWN_COST    = {"meat": 20}
-ARCHER_COST  = {"wood": 15, "meat": 30}
-LANCER_COST  = {"wood": 45, "meat": 10}
-WARRIOR_COST = {"gold": 35, "meat": 40}
+PAWN_COST     = {"meat": 20}
+ARCHER_COST   = {"wood": 15, "meat": 30}
+LANCER_COST   = {"wood": 45, "meat": 10}
+WARRIOR_COST  = {"gold": 35, "meat": 40}
+MONK_COST     = {"gold": 20, "meat": 30}
 
 BUTTON_SIZE = 72
 
 _PRODUCTION: dict[str, list[tuple[str, dict, str]]] = {
-    "Castle":   [("Pawn",    PAWN_COST,    "spawn_pawn")],
-    "Archery":  [("Archer",  ARCHER_COST,  "spawn_archer")],
-    "Barracks": [("Lancer",  LANCER_COST,  "spawn_lancer"),
-                 ("Warrior", WARRIOR_COST, "spawn_warrior")],
-    "Tower":    [("Archer",  {},            "release_archer")],
+    "Castle":    [("Pawn",    PAWN_COST,    "spawn_pawn")],
+    "Archery":   [("Archer",  ARCHER_COST,  "spawn_archer")],
+    "Barracks":  [("Lancer",  LANCER_COST,  "spawn_lancer"),
+                  ("Warrior", WARRIOR_COST, "spawn_warrior")],
+    "Tower":     [("Archer",  {},            "release_archer")],
+    "Monastery": [("Monk",    MONK_COST,     "spawn_monk")],
 }
 
 
@@ -106,10 +108,11 @@ class HUD:
 
         _fit = BUTTON_SIZE - 8
         raw_build = {
-            "Archery":  assets.load_image("assets/Buildings/Blue Buildings/Archery.png"),
-            "Barracks": assets.load_image("assets/Buildings/Blue Buildings/Barracks.png"),
-            "House":    assets.load_image("assets/Buildings/Blue Buildings/House1.png"),
-            "Tower":    assets.load_image("assets/Buildings/Blue Buildings/Tower.png"),
+            "Archery":   assets.load_image("assets/Buildings/Blue Buildings/Archery.png"),
+            "Barracks":  assets.load_image("assets/Buildings/Blue Buildings/Barracks.png"),
+            "House":     assets.load_image("assets/Buildings/Blue Buildings/House1.png"),
+            "Tower":     assets.load_image("assets/Buildings/Blue Buildings/Tower.png"),
+            "Monastery": assets.load_image("assets/Buildings/Blue Buildings/Monastery.png"),
         }
         self._build_icons: dict[str, pygame.Surface] = {
             k: self._scale_to_fit(v, _fit) for k, v in raw_build.items()

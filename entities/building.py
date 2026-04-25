@@ -58,7 +58,7 @@ class Building(Entity):
 
 class Archery(Building):
     DISPLAY_W   = 192
-    DISPLAY_H   = 192
+    DISPLAY_H   = 256
     COLLISION_W = 140
     COLLISION_H = 100
 
@@ -69,7 +69,7 @@ class Archery(Building):
 
 class Barracks(Building):
     DISPLAY_W   = 192
-    DISPLAY_H   = 192
+    DISPLAY_H   = 256
     COLLISION_W = 140
     COLLISION_H = 100
 
@@ -91,6 +91,17 @@ class House(Building):
         super().__init__(x, y, team, max_hp=150)
         n = max(1, min(3, variant))
         self.sprite_key = f"building/house{n}/{team}"
+
+
+class Monastery(Building):
+    DISPLAY_W   = 192
+    DISPLAY_H   = 320
+    COLLISION_W = 140
+    COLLISION_H = 100
+
+    def __init__(self, x: float, y: float, team: str):
+        super().__init__(x, y, team, max_hp=300)
+        self.sprite_key = f"building/monastery/{team}"
 
 
 _GARRISONED_RANGE    = 450.0          # ~2.25× normal attack range

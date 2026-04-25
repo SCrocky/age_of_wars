@@ -146,6 +146,11 @@ def _serialize_entity(entity) -> dict:
         base["pawn_carried"]  = getattr(entity, "_carried", 0)
         base["resource_type"] = getattr(entity, "_resource_type", None)
 
+    # Monk: send which entity is being healed so client can draw Heal_Effect
+    if type_name == "Monk":
+        t = getattr(entity, "attack_target", None)
+        base["heal_target_id"] = t.entity_id if t is not None else None
+
     return base
 
 
