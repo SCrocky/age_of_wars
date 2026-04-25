@@ -103,8 +103,14 @@ class Game:
             )
 
     def update(self, dt: float):
+        _combatants = [e for e in self.units + self.buildings if getattr(e, "alive", True)]
+        _enemy_pool: dict[str, list] = {}
         for unit in self.units:
-            new_arrows = unit.update(dt, self.map)
+            if unit.team not in _enemy_pool:
+                _enemy_pool[unit.team] = [e for e in _combatants if e.team != unit.team]
+
+        for unit in self.units:
+            new_arrows = unit.update(dt, self.map, _enemy_pool.get(unit.team, []))
             for arrow in new_arrows:
                 self._assign_id(arrow)
             self.arrows.extend(new_arrows)

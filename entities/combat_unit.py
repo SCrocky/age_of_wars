@@ -1,4 +1,5 @@
 from entities.unit import Unit
+from map import TILE_SIZE
 
 ANIM_FPS            = 8
 NEARBY_ENEMY_RADIUS = 320.0  # 5 tiles — auto-retarget range on kill
@@ -34,8 +35,11 @@ class CombatUnit(Unit):
     # Main update loop
     # ------------------------------------------------------------------
 
-    def update(self, dt: float, tile_map=None) -> list:
+    def update(self, dt: float, tile_map=None, enemy_pool=None) -> list:
         self._time += dt
+
+        if enemy_pool is not None:
+            self._enemy_pool = enemy_pool
 
         early = self._pre_state_tick(dt)
         if early is not None:
@@ -65,6 +69,13 @@ class CombatUnit(Unit):
             self._state = "run"
             self._move_along_path(dt)
         else:
+            nearest = self.search_nearby_for(
+                self._enemy_pool,
+                lambda e: e.alive and e.team != self.team,
+                self.VISION_RADIUS * TILE_SIZE * 0.75,
+            )
+            if nearest is not None:
+                self.attack_target = nearest
             self._state = "idle"
 
         self._tick_animation(dt)
