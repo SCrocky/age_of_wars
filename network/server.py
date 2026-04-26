@@ -181,6 +181,8 @@ class GameServer:
                 if tower.garrison(archer):
                     self.game.units.remove(archer)
                 done.append(archer_id)
+            elif archer.attack_target is None:
+                archer._navigate_to(tx, ty, self.game.map, TILE_SIZE)
         for archer_id in done:
             del self._pending_garrisons[archer_id]
 
@@ -262,11 +264,7 @@ class GameServer:
                             self.game.units.remove(u)
                             self._pending_garrisons.pop(u.entity_id, None)
                     else:
-                        dest = self.game.map.nearest_walkable(
-                            int(tower.x // TILE_SIZE), int(tower.y // TILE_SIZE)
-                        )
-                        start = (int(u.x // TILE_SIZE), int(u.y // TILE_SIZE))
-                        u.set_path(astar(self.game.map, start, dest))
+                        u._navigate_to(tx, ty, self.game.map, TILE_SIZE)
                         self._pending_garrisons[u.entity_id] = tower
                     break  # one archer per tower
 

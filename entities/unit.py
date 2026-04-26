@@ -24,6 +24,8 @@ class Unit(Entity):
         self._facing_right:   bool  = True
         self._arrival_offset: tuple[float, float] = (0.0, 0.0)
         self._path_future = None   # pending async A* result
+        # (tx, ty, arrive_radius) set by _navigate_to; consumed once per update tick.
+        self._approach_target: tuple[float, float, float] | None = None
 
     # ------------------------------------------------------------------
     # Commands
@@ -33,6 +35,7 @@ class Unit(Entity):
         self._path_future = None   # discard any pending repath
         self.path = list(path)
         self.attack_target = None
+        self._approach_target = None
         if path:
             self._arrival_offset = (random.uniform(-12.0, 12.0), random.uniform(-12.0, 12.0))
         else:
@@ -43,6 +46,7 @@ class Unit(Entity):
         self.attack_target = target
         self._enemy_pool   = enemy_pool if enemy_pool is not None else []
         self.path          = []
+        self._approach_target = None
 
     # ------------------------------------------------------------------
     # Shared movement helpers
@@ -115,6 +119,44 @@ class Unit(Entity):
         gr = int(ty // TILE_SIZE)
         gc, gr = tile_map.nearest_walkable(gc, gr)
         self._path_future = submit_astar(tile_map, (sc, sr), (gc, gr))
+
+    def _navigate_to(self, tx: float, ty: float, tile_map, arrive_radius: float):
+        """Plan an approach toward (tx, ty); the unit's update tick performs the movement."""
+        self._approach_target = (tx, ty, arrive_radius)
+        if not self.path and tile_map:
+            sc = int(self.x // TILE_SIZE)
+            sr = int(self.y // TILE_SIZE)
+            if tile_map.is_walkable(sc, sr):
+                self._repath(tx, ty, tile_map)
+
+    def _repath(self, tx: float, ty: float, tile_map):
+        from systems.pathfinding import astar
+        sc = int(self.x // TILE_SIZE)
+        sr = int(self.y // TILE_SIZE)
+        gc = int(tx // TILE_SIZE)
+        gr = int(ty // TILE_SIZE)
+        if not tile_map.is_walkable(gc, gr):
+            gc, gr = tile_map.nearest_walkable(gc, gr)
+        self.path = astar(tile_map, (sc, sr), (gc, gr))
+
+    def _step_approach(self, dt: float):
+        """Move one tick toward the stored approach target; clears the target on use."""
+        if self._approach_target is None:
+            return
+        tx, ty, radius = self._approach_target
+        self._approach_target = None
+        dist = math.hypot(tx - self.x, ty - self.y)
+        if dist <= radius:
+            return
+        if self.path:
+            self._move_along_path(dt)
+        else:
+            dx, dy = tx - self.x, ty - self.y
+            step = self.MOVE_SPEED * dt
+            self.x += dx / dist * step
+            self.y += dy / dist * step
+            if abs(dx) > 1:
+                self._facing_right = dx > 0
 
     @property
     def sort_y(self) -> float:

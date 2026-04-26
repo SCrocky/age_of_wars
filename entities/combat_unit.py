@@ -65,6 +65,9 @@ class CombatUnit(Unit):
                     self._state        = "run"
                     self._action_timer = 0.0
                     self._chase(dt, tile_map)
+        elif self._approach_target is not None:
+            self._state = "run"
+            self._step_approach(dt)
         elif self.path:
             self._state = "run"
             self._move_along_path(dt)
