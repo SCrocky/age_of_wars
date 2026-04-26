@@ -11,8 +11,9 @@ No installs beyond Python. No accounts. No monetisation. Ever.
 ```bash
 pip install -r requirements.txt
 
-# Single-player
-python main.py
+# Single-player (server runs in solo mode against an AI opponent)
+python server_main.py --solo
+python client_main.py
 
 # Multiplayer — host
 python server_main.py
@@ -33,6 +34,8 @@ Collect **gold**, **wood**, and **meat** to build up your base and train troops.
 | House | Raises population cap, acts as a resource depot |
 | Archery | Trains Archers |
 | Barracks | Trains Warriors and Lancers |
+| Monastery | Trains Monks |
+| Tower | Defensive structure — garrison an Archer for extra range and damage |
 
 | Unit | Role |
 |---|---|
@@ -40,6 +43,7 @@ Collect **gold**, **wood**, and **meat** to build up your base and train troops.
 | Archer | Ranged — picks off enemies from a distance |
 | Warrior | Heavy melee — blocks the first hit every swing |
 | Lancer | Fast melee — 8-directional attacks |
+| Monk | Support — heals nearby allied units |
 
 ---
 
@@ -53,8 +57,10 @@ Collect **gold**, **wood**, and **meat** to build up your base and train troops.
 | Right-click unit / building | Attack |
 | Right-click resource | Gather (Pawns) |
 | Right-click ground | Move |
+| Right-click own Tower (with Archer selected) | Garrison the Archer |
 | Arrow keys | Pan camera |
 | Mouse wheel | Zoom |
+| H | Centre camera on your Castle |
 | ESC | Cancel pending action |
 
 ---
