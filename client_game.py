@@ -144,11 +144,11 @@ class ClientGame:
 
         for proxy in self._proxies.values():
             t = type(proxy).__name__
-            if t in ("Castle", "Archery", "Barracks", "House", "Tower"):
+            if t in ("Castle", "Archery", "Barracks", "House", "Tower", "Monastery"):
                 self._buildings.append(proxy)
             elif t == "Blueprint":
                 self._blueprints.append(proxy)
-            elif t in ("Archer", "Warrior", "Lancer"):
+            elif t in ("Archer", "Warrior", "Lancer", "Monk"):
                 self._units.append(proxy)
             elif t == "Pawn":
                 self._pawns.append(proxy)
@@ -217,6 +217,14 @@ class ClientGame:
                 self.debug = not self.debug
             elif event.key == pygame.K_F3:
                 self._show_debug = not self._show_debug
+            elif event.key == pygame.K_s:
+                mx, my = self._current_mouse_pos
+                wx, wy = self.camera.screen_to_world(mx, my)
+                self._cmd_queue.put({
+                    "type":    "CMD_DEV_SPAWN",
+                    "world_x": wx,
+                    "world_y": wy,
+                })
             elif event.key == pygame.K_h:
                 castle = next(
                     (b for b in self._buildings
@@ -253,6 +261,8 @@ class ClientGame:
                         self._emit_spawn("Lancer")
                     elif action == "spawn_warrior":
                         self._emit_spawn("Warrior")
+                    elif action == "spawn_monk":
+                        self._emit_spawn("Monk")
                     elif action == "release_archer":
                         self._emit_release()
                     elif action and action.startswith("build_"):
@@ -287,6 +297,10 @@ class ClientGame:
         for sheep in self._resources:
             if type(sheep).__name__ == "MeatNode":
                 sheep.tick_sheep(dt)
+
+        for unit in self._units:
+            if type(unit).__name__ == "Monk":
+                unit.tick_heal_effect(dt)
 
         friendly = [e for e in self._units + self._pawns + self._buildings
                     if e.team == self.player_team]
@@ -496,7 +510,7 @@ class ClientGame:
         try:
             for obj in world_objects:
                 t = type(obj).__name__
-                if t in ("Castle", "Archery", "Barracks", "House", "Tower"):
+                if t in ("Castle", "Archery", "Barracks", "House", "Tower", "Monastery"):
                     entity_renderer.render_building(obj, renderer, cam)
                 elif t == "Blueprint":
                     entity_renderer.render_blueprint(obj, renderer, cam)
@@ -510,6 +524,17 @@ class ClientGame:
                     entity_renderer.render_warrior(obj, renderer, cam)
                 elif t == "Lancer":
                     entity_renderer.render_lancer(obj, renderer, cam)
+                elif t == "Monk":
+                    entity_renderer.render_monk(obj, renderer, cam)
+
+            # Heal effects rendered on top of all entities
+            for monk in self._units:
+                if type(monk).__name__ == "Monk" and monk._heal_target_id:
+                    target = self._proxies.get(monk._heal_target_id)
+                    if target and target.alive:
+                        entity_renderer.render_heal_effect(
+                            target, monk._heal_effect_frame, monk.team, renderer, cam
+                        )
 
             for arrow in self._arrows:
                 if self.fog.is_visible(arrow.x, arrow.y, TILE_SIZE):

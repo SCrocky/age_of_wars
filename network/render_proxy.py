@@ -13,29 +13,39 @@ Usage:
 
 from __future__ import annotations
 
+from entities.archer   import Archer
+from entities.warrior  import Warrior
+from entities.lancer   import Lancer
+from entities.monk     import Monk
+from entities.pawn     import Pawn
+from entities.building import Archery, Barracks, Castle, House, Monastery, Tower
+from entities.resource import GoldNode, WoodNode, MeatNode
+
 # ---------------------------------------------------------------------------
-# Shared display-size constants (mirror the real entity classes)
+# Display-size specs pulled directly from the entity classes
 # ---------------------------------------------------------------------------
 
 _UNIT_SPECS = {
-    "Archer":  (96,  20),
-    "Warrior": (128, 22),
-    "Lancer":  (128, 22),
+    "Archer":  (Archer.DISPLAY_SIZE,  Archer.SELECT_RADIUS),
+    "Warrior": (Warrior.DISPLAY_SIZE, Warrior.SELECT_RADIUS),
+    "Lancer":  (Lancer.DISPLAY_SIZE,  Lancer.SELECT_RADIUS),
+    "Monk":    (Monk.DISPLAY_SIZE,    Monk.SELECT_RADIUS),
 }
-_PAWN_SPEC = (80, 18)
+_PAWN_SPEC = (Pawn.DISPLAY_SIZE, Pawn.SELECT_RADIUS)
 
 _BUILDING_SPECS = {
-    "Castle":   (192, 192, 140, 140, True,  10, 80),  # DW, DH, CW, CH, depot, pop, hbw
-    "Archery":  (192, 192, 140, 140, False, 0,  60),
-    "Barracks": (192, 192, 140, 140, False, 0,  60),
-    "House":    (128, 128, 90,  70,  True,  5,  50),
-    "Tower":    (128, 256, 80,  80,  False, 0,  50),
+    "Castle":    (Castle.DISPLAY_W,    Castle.DISPLAY_H,    Castle.COLLISION_W,    Castle.COLLISION_H,    Castle.is_depot,    Castle.pop_bonus,    Castle.HEALTH_BAR_WIDTH),
+    "Archery":   (Archery.DISPLAY_W,   Archery.DISPLAY_H,   Archery.COLLISION_W,   Archery.COLLISION_H,   Archery.is_depot,   Archery.pop_bonus,   Archery.HEALTH_BAR_WIDTH),
+    "Barracks":  (Barracks.DISPLAY_W,  Barracks.DISPLAY_H,  Barracks.COLLISION_W,  Barracks.COLLISION_H,  Barracks.is_depot,  Barracks.pop_bonus,  Barracks.HEALTH_BAR_WIDTH),
+    "House":     (House.DISPLAY_W,     House.DISPLAY_H,     House.COLLISION_W,     House.COLLISION_H,     House.is_depot,     House.pop_bonus,     House.HEALTH_BAR_WIDTH),
+    "Tower":     (Tower.DISPLAY_W,     Tower.DISPLAY_H,     Tower.COLLISION_W,     Tower.COLLISION_H,     Tower.is_depot,     Tower.pop_bonus,     Tower.HEALTH_BAR_WIDTH),
+    "Monastery": (Monastery.DISPLAY_W, Monastery.DISPLAY_H, Monastery.COLLISION_W, Monastery.COLLISION_H, Monastery.is_depot, Monastery.pop_bonus, Monastery.HEALTH_BAR_WIDTH),
 }
 
 _RESOURCE_DISPLAY = {
-    "GoldNode": 96,
-    "WoodNode": 112,
-    "MeatNode": 80,
+    "GoldNode": GoldNode.DISPLAY_SIZE,
+    "WoodNode": WoodNode.DISPLAY_SIZE,
+    "MeatNode": MeatNode.DISPLAY_SIZE,
 }
 
 # ---------------------------------------------------------------------------
@@ -108,6 +118,11 @@ class EntityProxy:
         self.garrisoned_frame_idx:    int  = 0
         self.garrisoned_facing_right: bool = True
 
+        # Monk heal effect
+        self._heal_target_id:    int | None = None
+        self._heal_effect_frame: int        = 0
+        self._heal_effect_timer: float      = 0.0
+
     @property
     def depleted(self) -> bool:
         return self.amount <= 0
@@ -139,6 +154,17 @@ class EntityProxy:
             self._anim_timer -= 1.0 / ANIM_FPS
             frame_count       = _SHEEP_FRAMES.get(self._sheep_state, 1)
             self._frame_idx   = (self._frame_idx + 1) % frame_count
+
+    def tick_heal_effect(self, dt: float):
+        from entities.monk import ANIM_FPS, FRAME_COUNTS
+        if self._heal_target_id is None:
+            self._heal_effect_frame = 0
+            self._heal_effect_timer = 0.0
+            return
+        self._heal_effect_timer += dt
+        if self._heal_effect_timer >= 1.0 / ANIM_FPS:
+            self._heal_effect_timer -= 1.0 / ANIM_FPS
+            self._heal_effect_frame = (self._heal_effect_frame + 1) % FRAME_COUNTS["heal"]
 
     def hit_test(self, sx: float, sy: float, camera) -> bool:
         wx, wy = camera.world_to_screen(self.x, self.y)
@@ -205,6 +231,10 @@ class EntityProxy:
         self.garrisoned_anim_key     = data.get("garrisoned_anim_key", "idle")
         self.garrisoned_frame_idx    = data.get("garrisoned_frame_idx", 0)
         self.garrisoned_facing_right = data.get("garrisoned_facing_right", True)
+
+        # Monk heal effect
+        if data.get("type") == "Monk":
+            self._heal_target_id = data.get("heal_target_id")
 
 
 class _BuildingSubProxy:

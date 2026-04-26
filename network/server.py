@@ -18,6 +18,7 @@ from game import Game
 from map import TILE_SIZE
 from entities.building import Castle, Tower
 from entities.archer import Archer
+from entities.warrior import Warrior
 from systems.pathfinding import astar
 from network.serialization import serialize_snapshot, deserialize_command
 
@@ -180,6 +181,8 @@ class GameServer:
                 if tower.garrison(archer):
                     self.game.units.remove(archer)
                 done.append(archer_id)
+            elif archer.attack_target is None:
+                archer._navigate_to(tx, ty, self.game.map, TILE_SIZE)
         for archer_id in done:
             del self._pending_garrisons[archer_id]
 
@@ -261,11 +264,7 @@ class GameServer:
                             self.game.units.remove(u)
                             self._pending_garrisons.pop(u.entity_id, None)
                     else:
-                        dest = self.game.map.nearest_walkable(
-                            int(tower.x // TILE_SIZE), int(tower.y // TILE_SIZE)
-                        )
-                        start = (int(u.x // TILE_SIZE), int(u.y // TILE_SIZE))
-                        u.set_path(astar(self.game.map, start, dest))
+                        u._navigate_to(tx, ty, self.game.map, TILE_SIZE)
                         self._pending_garrisons[u.entity_id] = tower
                     break  # one archer per tower
 
@@ -282,6 +281,13 @@ class GameServer:
             archer = tower.release_archer()
             if archer is not None:
                 self.game.units.append(archer)
+
+        elif kind == "CMD_DEV_SPAWN":
+            wx = cmd.get("world_x", 0.0)
+            wy = cmd.get("world_y", 0.0)
+            unit = self.game._assign_id(Warrior(wx, wy, team=player_team))
+            unit.hp = unit.max_hp // 2
+            self.game.units.append(unit)
 
         elif kind == "CMD_ASSIGN_BUILD":
             pawn_ids     = set(cmd.get("pawn_ids", []))

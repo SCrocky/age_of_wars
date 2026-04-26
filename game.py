@@ -5,23 +5,26 @@ from map import TileMap, TILE_SIZE
 from entities.archer import Archer
 from entities.lancer import Lancer
 from entities.warrior import Warrior
+from entities.monk import Monk
 from entities.pawn import Pawn
-from entities.building import Building, Castle, Archery, Barracks, House, Tower
+from entities.building import Building, Castle, Archery, Barracks, House, Tower, Monastery
 from entities.resource import GoldNode, WoodNode, MeatNode
 from entities.projectile import Arrow
 from entities.blueprint import Blueprint
 
 _BUILDING_CLS = {
-    "Castle":   Castle,
-    "Archery":  Archery,
-    "Barracks": Barracks,
-    "House":    House,
-    "Tower":    Tower,
+    "Castle":    Castle,
+    "Archery":   Archery,
+    "Barracks":  Barracks,
+    "House":     House,
+    "Tower":     Tower,
+    "Monastery": Monastery,
 }
 _UNIT_CLS = {
     "Archer":  Archer,
     "Lancer":  Lancer,
     "Warrior": Warrior,
+    "Monk":    Monk,
 }
 
 
@@ -105,15 +108,21 @@ class Game:
     def update(self, dt: float):
         _combatants = [e for e in self.units + self.buildings if getattr(e, "alive", True)]
         _enemy_pool: dict[str, list] = {}
+        _ally_pool:  dict[str, list] = {}
         for unit in self.units:
             if unit.team not in _enemy_pool:
                 _enemy_pool[unit.team] = [e for e in _combatants if e.team != unit.team]
+            if unit.team not in _ally_pool:
+                _ally_pool[unit.team] = [u for u in self.units + self.pawns if u.team == unit.team]
 
         for unit in self.units:
-            new_arrows = unit.update(dt, self.map, _enemy_pool.get(unit.team, []))
-            for arrow in new_arrows:
-                self._assign_id(arrow)
-            self.arrows.extend(new_arrows)
+            if isinstance(unit, Monk):
+                unit.update(dt, self.map, _ally_pool.get(unit.team, []))
+            else:
+                new_arrows = unit.update(dt, self.map, _enemy_pool.get(unit.team, []))
+                for arrow in new_arrows:
+                    self._assign_id(arrow)
+                self.arrows.extend(new_arrows)
 
         for building in self.buildings:
             if isinstance(building, Tower) and building.garrisoned_archer is not None:
@@ -208,6 +217,7 @@ class Game:
         "Archer":  (Archer,  {"wood": 15, "meat": 30}, Archery),
         "Lancer":  (Lancer,  {"wood": 45, "meat": 10}, Barracks),
         "Warrior": (Warrior, {"gold": 35, "meat": 40}, Barracks),
+        "Monk":    (Monk,    {"gold": 20, "meat": 30}, Monastery),
     }
 
     def _spawn_unit(self, unit_type: str, team: str = "blue", building=None):

@@ -138,8 +138,12 @@ class Pawn(Unit):
             deposit = handler(dt, tile_map)
         else:
             deposit = {}
-            if self.path:
-                self._move_along_path(dt)
+
+        if self._approach_target is not None:
+            self._step_approach(dt)
+        elif self.path:
+            self._move_along_path(dt)
+
         self._tick_animation(dt)
         return deposit
 
@@ -161,7 +165,7 @@ class Pawn(Unit):
                 self._task = Task.IDLE
         else:
             self._navigate_to(self._resource_node.x, self._resource_node.y,
-                              dt, tile_map, arrive_radius=48.0)
+                              tile_map, arrive_radius=48.0)
             if math.hypot(self._resource_node.x - self.x,
                           self._resource_node.y - self.y) <= 48.0:
                 self._task         = Task.GATHER
@@ -201,7 +205,7 @@ class Pawn(Unit):
             self._task = Task.IDLE
             return {}
         tx, ty = depot.closest_point(self.x, self.y)
-        self._navigate_to(tx, ty, dt, tile_map, self.DEPOSIT_RADIUS)
+        self._navigate_to(tx, ty, tile_map, self.DEPOSIT_RADIUS)
         if math.hypot(tx - self.x, ty - self.y) <= self.DEPOSIT_RADIUS:
             carried = int(self._carried)
             deposit = {self._resource_type: carried} if carried > 0 else {}
@@ -216,7 +220,7 @@ class Pawn(Unit):
             self._try_nearby_blueprint()
         else:
             tx, ty = self._blueprint.closest_point(self.x, self.y)
-            self._navigate_to(tx, ty, dt, tile_map, INTERACT_RADIUS)
+            self._navigate_to(tx, ty, tile_map, INTERACT_RADIUS)
             if math.hypot(tx - self.x, ty - self.y) <= INTERACT_RADIUS:
                 self._task = Task.BUILD
         return {}
@@ -254,27 +258,8 @@ class Pawn(Unit):
             return None
         return min(depots, key=lambda d: math.hypot(d.x - self.x, d.y - self.y))
 
-    def _navigate_to(self, tx: float, ty: float, dt: float, tile_map, arrive_radius: float):
-        """Move toward (tx, ty); re-path if needed, direct-move when path exhausted."""
-        if not self.path:
-            if tile_map:
-                sc = int(self.x // TILE_SIZE)
-                sr = int(self.y // TILE_SIZE)
-                if tile_map.is_walkable(sc, sr):
-                    self._repath(tx, ty, tile_map)
-        dist = math.hypot(tx - self.x, ty - self.y)
-        if dist > arrive_radius:
-            if self.path:
-                self._move_along_path(dt)
-            else:
-                dx, dy = tx - self.x, ty - self.y
-                step = self.MOVE_SPEED * dt
-                self.x += dx / dist * step
-                self.y += dy / dist * step
-                if abs(dx) > 1:
-                    self._facing_right = dx > 0
-
     def _repath(self, tx: float, ty: float, tile_map):
+        # Pawns prefer entering buildings from the south (gate side).
         from systems.pathfinding import astar
         sc = int(self.x // TILE_SIZE)
         sr = int(self.y // TILE_SIZE)
