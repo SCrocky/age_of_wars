@@ -186,8 +186,9 @@ class Game:
                         unit.y += oy * (1 if dy >= 0 else -1)
 
     def _apply_separation(self, dt: float):
-        RADIUS = 52.0
-        FORCE  = 180.0
+        RADIUS        = 52.0
+        REPEL_FORCE   = 240.0
+        ATTRACT_FORCE = 80.0
         all_units = self.units + self.pawns
         for i, a in enumerate(all_units):
             fx = fy = 0.0
@@ -198,15 +199,40 @@ class Game:
                 dy = a.y - b.y
                 dist = math.hypot(dx, dy)
                 if 0 < dist < RADIUS:
-                    strength = (RADIUS - dist) / RADIUS
-                    fx += dx / dist * strength
-                    fy += dy / dist * strength
-            new_x = a.x + fx * FORCE * dt
-            new_y = a.y + fy * FORCE * dt
+                    # Quadratic falloff: weak at the edge, strong near contact.
+                    s = (RADIUS - dist) / RADIUS
+                    s *= s
+                    fx += dx / dist * s
+                    fy += dy / dist * s
+            fx *= REPEL_FORCE
+            fy *= REPEL_FORCE
+
+            target = self._unit_attract_point(a)
+            if target is not None:
+                tx, ty = target
+                tdx = tx - a.x
+                tdy = ty - a.y
+                tdist = math.hypot(tdx, tdy)
+                if tdist > 0:
+                    fx += tdx / tdist * ATTRACT_FORCE
+                    fy += tdy / tdist * ATTRACT_FORCE
+
+            new_x = a.x + fx * dt
+            new_y = a.y + fy * dt
             if self.map.is_walkable(int(new_x // TILE_SIZE), int(a.y // TILE_SIZE)):
                 a.x = new_x
             if self.map.is_walkable(int(a.x // TILE_SIZE), int(new_y // TILE_SIZE)):
                 a.y = new_y
+
+    @staticmethod
+    def _unit_attract_point(unit):
+        if unit.path:
+            col, row = unit.path[0]
+            return (col * TILE_SIZE + TILE_SIZE / 2, row * TILE_SIZE + TILE_SIZE / 2)
+        target = getattr(unit, "attack_target", None)
+        if target is not None and getattr(target, "alive", True):
+            return target.closest_point(unit.x, unit.y)
+        return None
 
     # ------------------------------------------------------------------
     # Server-facing helpers
