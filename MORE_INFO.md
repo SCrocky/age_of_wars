@@ -177,7 +177,7 @@ server_main.py              client_main.py (×2)
 ## File Structure
 
 ```
-age_of_wars/
+age_of_tiny_wars/
 ├── main.py               # Single-player entry point
 ├── server_main.py        # Dedicated server entry point
 ├── client_main.py        # Multiplayer client entry point

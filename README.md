@@ -11,7 +11,7 @@ No installs beyond Python. No accounts. No monetisation. Ever.
 Download the **[Tiny Swords (Free Pack)](https://pixelfrog-assets.itch.io/tiny-swords)** asset pack and place the zip — unmodified, still named `Tiny Swords (Free Pack).zip` — in the `downloaded_assets/` folder at the repo root. The game reads sprites straight from the zip, so there's no need to extract it.
 
 ```
-age_of_wars/
+age_of_tiny_wars/
 └── downloaded_assets/
     └── Tiny Swords (Free Pack).zip
 ```
@@ -101,4 +101,4 @@ All in-game art is from the **[Tiny Swords (Free Pack)](https://pixelfrog-assets
 
 A big thank you to everyone who has played, reported bugs, or sent a PR — you're what keeps this project alive.
 
-Want to go deeper? Check out the [contributor guide](https://github.com/SCrocky/age_of_wars/blob/master/MORE_INFO.md) for architecture notes, coding conventions, and a roadmap of planned features.
+Want to go deeper? Check out the [contributor guide](https://github.com/SCrocky/age_of_tiny_wars/blob/master/MORE_INFO.md) for architecture notes, coding conventions, and a roadmap of planned features.
