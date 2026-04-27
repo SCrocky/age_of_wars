@@ -6,7 +6,7 @@ No installs beyond Python. No accounts. No monetisation. Ever.
 
 ---
 
-## Play
+## Prerequisites
 
 Download the **[Tiny Swords (Free Pack)](https://pixelfrog-assets.itch.io/tiny-swords)** asset pack and place the zip — unmodified, still named `Tiny Swords (Free Pack).zip` — in the `downloaded_assets/` folder at the repo root. The game reads sprites straight from the zip, so there's no need to extract it.
 
@@ -17,6 +17,8 @@ age_of_tiny_wars/
 ```
 
 If you'd rather keep the zip elsewhere, point `ASSETS_ZIP` at it (e.g. `ASSETS_ZIP=/path/to/Tiny\ Swords\ \(Free\ Pack\).zip`).
+
+## Play the game
 
 ```bash
 pip install -r requirements.txt
