@@ -23,7 +23,9 @@ def _generate_scene() -> str:
     import populate_map as _pm
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    stem  = os.path.join(os.path.dirname(__file__), "map_editor", "maps", f"map_{stamp}")
+    maps_dir = os.path.join(os.path.dirname(__file__), "map_editor", "maps")
+    os.makedirs(maps_dir, exist_ok=True)
+    stem  = os.path.join(maps_dir, f"map_{stamp}")
     seed  = random.randrange(2 ** 32)
     rng   = random.Random(seed)
 
