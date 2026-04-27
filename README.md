@@ -34,6 +34,9 @@ python server_main.py
 python client_main.py
 ```
 
+<img width="2228" height="1189" alt="screenshot-2026-04-28T06:14:03+08:00" src="https://github.com/user-attachments/assets/fafabe20-796f-4e74-8640-d7ef3ca37e99" />
+
+
 ---
 
 ## How it works
