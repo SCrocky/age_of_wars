@@ -99,7 +99,7 @@ def main():
 
     pygame.init()
     window   = Window("Age of Wars — Multiplayer", size=(SCREEN_WIDTH, SCREEN_HEIGHT),
-                      fullscreen=True)
+                      fullscreen_desktop=True)
     renderer = Renderer(window, accelerated=1, vsync=True)
     renderer.logical_size = (SCREEN_WIDTH, SCREEN_HEIGHT)
     clock    = pygame.time.Clock()
