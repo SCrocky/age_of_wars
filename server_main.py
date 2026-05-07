@@ -3,8 +3,10 @@ Age of Wars — dedicated game server.
 
 Usage:
     python server_main.py [--scene PATH] [--host HOST] [--port PORT]
+                          [--players blue=human,red=ai,...]
 
-If --scene is omitted, a fresh map is generated.
+If --scene is omitted, a fresh map is generated using the team list from
+--players. Default --players is 'blue=human,black=human' (1v1 multiplayer).
 """
 
 import argparse
@@ -13,7 +15,47 @@ import os
 import sys
 
 
-def _generate_scene(spawn_teams: tuple[str, str] | None = None) -> str:
+_VALID_ROLES = ("human", "ai")
+
+
+def _parse_players_arg(arg: str) -> list[tuple[str, str]]:
+    """
+    Parse 'blue=human,red=ai,...' into [('blue','human'), ('red','ai'), ...].
+    Validates teams, roles, uniqueness, and supported seat count.
+    """
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "map_editor"))
+    from entities.teams import TEAM_COLORS
+    import create_map as _cm
+
+    seats: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw in arg.split(","):
+        token = raw.strip()
+        if "=" not in token:
+            raise SystemExit(f"--players: bad token {token!r}; expected team=role")
+        team, role = (s.strip() for s in token.split("=", 1))
+        if team not in TEAM_COLORS:
+            raise SystemExit(
+                f"--players: unknown team {team!r}; valid: {', '.join(TEAM_COLORS)}"
+            )
+        if role not in _VALID_ROLES:
+            raise SystemExit(
+                f"--players: unknown role {role!r}; valid: {', '.join(_VALID_ROLES)}"
+            )
+        if team in seen:
+            raise SystemExit(f"--players: duplicate team {team!r}")
+        seen.add(team)
+        seats.append((team, role))
+
+    if len(seats) not in _cm.SUPPORTED_PLAYER_COUNTS:
+        raise SystemExit(
+            f"--players: {len(seats)} seat(s) given; supported counts: "
+            f"{_cm.SUPPORTED_PLAYER_COUNTS}"
+        )
+    return seats
+
+
+def _generate_scene(spawn_teams: tuple[str, ...]) -> str:
     """Generate a fresh map and return the path to the scene JSON."""
     import json
     import random
@@ -29,9 +71,8 @@ def _generate_scene(spawn_teams: tuple[str, str] | None = None) -> str:
     seed  = random.randrange(2 ** 32)
     rng   = random.Random(seed)
 
-    teams = spawn_teams or _cm.DEFAULT_SPAWN_TEAMS
     grid              = _cm.make_grid()
-    zones             = _cm.assign_zones(rng, teams)
+    zones             = _cm.assign_zones(rng, spawn_teams)
     resources, spawns = _cm.place_resources(rng, zones, grid)
     map_data          = _cm.build_output(grid, zones, resources, spawns, seed)
     buildings, units  = _pm.populate(map_data)
@@ -43,41 +84,53 @@ def _generate_scene(spawn_teams: tuple[str, str] | None = None) -> str:
     return scene_path
 
 
-async def main(scene_path: str, host: str, port: int):
-    from network.lobby import wait_for_players
-    from network.server import GameServer
-
-    players = await wait_for_players(host, port, scene_path)
-    server  = GameServer(scene_path)
-    print("[server] Starting game…")
-    await server.run(players)
-    print("[server] Game over.")
-
-
-async def main_solo(scene_path: str, host: str, port: int):
+def _validate_scene_matches_seats(scene_path: str,
+                                  seats: list[tuple[str, str]]) -> None:
     import json
-    from network.lobby import wait_for_one_player
+    from entities.teams import teams_from_scene
+    with open(scene_path) as f:
+        scene = json.load(f)
+    scene_teams = set(teams_from_scene(scene))
+    seat_teams  = {team for team, _ in seats}
+    if scene_teams != seat_teams:
+        raise SystemExit(
+            f"--players teams {sorted(seat_teams)} do not match scene teams "
+            f"{sorted(scene_teams)} in {scene_path}"
+        )
+
+
+async def main(scene_path: str, host: str, port: int,
+               seats: list[tuple[str, str]]):
+    import json
+    from network.lobby import wait_for_humans
     from network.server import GameServer
     from network.ai_player import AIPlayer
-    from entities.teams import teams_from_scene
 
     with open(scene_path) as f:
         scene = json.load(f)
 
-    human    = await wait_for_one_player(host, port, scene_path)
-    teams    = teams_from_scene(scene)
-    ai_team  = next((t for t in teams if t != human[2]), None)
-    if ai_team is None:
-        raise RuntimeError("Solo mode requires a scene with at least 2 spawn teams")
-    ai      = AIPlayer(ai_team, scene)
-    ai_task = asyncio.create_task(ai.run())
+    human_teams = [team for team, role in seats if role == "human"]
+    ai_teams    = [team for team, role in seats if role == "ai"]
 
-    server  = GameServer(scene_path)
-    print("[server] Starting solo game…")
+    # Spin up AIs first — their reader/writer are in-memory and ready immediately.
+    ais: list[AIPlayer] = []
+    ai_tasks: list[asyncio.Task] = []
+    for team in ai_teams:
+        ai = AIPlayer(team, scene)
+        ais.append(ai)
+        ai_tasks.append(asyncio.create_task(ai.run()))
+
+    humans = await wait_for_humans(host, port, scene_path, human_teams)
+
+    players = list(humans) + [(ai.reader, ai.writer, ai.team) for ai in ais]
+
+    server = GameServer(scene_path)
+    print(f"[server] Starting game — {len(humans)} human(s), {len(ais)} AI(s)")
     try:
-        await server.run([human, (ai.reader, ai.writer, ai.team)])
+        await server.run(players)
     finally:
-        ai_task.cancel()
+        for t in ai_tasks:
+            t.cancel()
     print("[server] Game over.")
 
 
@@ -86,26 +139,23 @@ if __name__ == "__main__":
     parser.add_argument("--scene", default=None, help="Path to scene JSON")
     parser.add_argument("--host",  default="0.0.0.0")
     parser.add_argument("--port",  default=9876, type=int)
-    parser.add_argument("--solo",  action="store_true",
-                        help="Single-player mode: AI controls the second team in the scene")
-    parser.add_argument("--teams", default=None,
-                        help="Two comma-separated team colors when generating a scene "
-                             "(any of blue,red,yellow,purple,black). Default: blue,black")
+    parser.add_argument(
+        "--players", default="blue=human,black=human",
+        help="Comma-separated team=role pairs (2–5 seats), e.g. "
+             "'blue=human,red=ai,yellow=human'. "
+             "Roles: human, ai. Teams: blue, red, yellow, purple, black.",
+    )
     args = parser.parse_args()
+
+    seats = _parse_players_arg(args.players)
+    teams = tuple(team for team, _ in seats)
 
     scene = args.scene
     if scene is None:
-        print("[server] Generating map…")
-        spawn_teams = None
-        if args.teams:
-            parts = [t.strip() for t in args.teams.split(",")]
-            if len(parts) != 2:
-                parser.error("--teams expects exactly 2 comma-separated colors")
-            spawn_teams = (parts[0], parts[1])
-        scene = _generate_scene(spawn_teams)
+        print(f"[server] Generating map for teams: {teams}…")
+        scene = _generate_scene(teams)
         print(f"[server] Scene: {scene}")
-
-    if args.solo:
-        asyncio.run(main_solo(scene, args.host, args.port))
     else:
-        asyncio.run(main(scene, args.host, args.port))
+        _validate_scene_matches_seats(scene, seats)
+
+    asyncio.run(main(scene, args.host, args.port, seats))

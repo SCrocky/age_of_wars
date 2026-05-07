@@ -168,12 +168,26 @@ class BotAI:
         if not idle_units or not self._enemy:
             return []
 
-        target = (next((e for e in self._enemy if e["type"] == "Castle"), None)
-                  or self._enemy[0])
+        ax, ay  = self._attack_anchor()
+        castles = [e for e in self._enemy if e["type"] == "Castle"]
+        pool    = castles if castles else self._enemy
+        target  = min(pool, key=lambda e: math.hypot(e["x"] - ax, e["y"] - ay))
+
         self._attack_tick = tick
         return [{"type": "CMD_ATTACK",
                  "unit_ids": [u["id"] for u in idle_units],
                  "target_id": target["id"]}]
+
+    def _attack_anchor(self) -> tuple[float, float]:
+        """Origin for closest-enemy ranking: own castle, else centroid of own
+        units, else map centre."""
+        if self._my_castle:
+            return self._my_castle["x"], self._my_castle["y"]
+        units = self._my_units + self._my_pawns
+        if units:
+            return (sum(u["x"] for u in units) / len(units),
+                    sum(u["y"] for u in units) / len(units))
+        return self._map_w / 2, self._map_h / 2
 
     # ------------------------------------------------------------------
     # Helpers

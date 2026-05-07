@@ -51,7 +51,7 @@ from math import log
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from entities.teams import TEAM_COLORS, BANNER_COLORS  # noqa: E402
 
-DEFAULT_SPAWN_TEAMS: tuple[str, str] = ("blue", "black")
+DEFAULT_SPAWN_TEAMS: tuple[str, ...] = ("blue", "black")
 
 # ---------------------------------------------------------------------------
 # Map dimensions
@@ -69,6 +69,16 @@ GRASS = 1
 # ---------------------------------------------------------------------------
 ZONE_COLS = 10
 ZONE_ROWS = 6
+
+# Fixed (zc, zr) spawn cells per player count. Cells are chosen on the 10×6
+# zone grid to keep starts roughly equidistant for FFA matches.
+_SPAWN_LAYOUTS: dict[int, tuple[tuple[int, int], ...]] = {
+    2: ((0, 0), (9, 5)),                                  # opposite corners
+    3: ((4, 0), (0, 5), (9, 5)),                          # top + two bottom
+    4: ((0, 0), (9, 0), (0, 5), (9, 5)),                  # four corners
+    5: ((0, 0), (9, 0), (0, 5), (9, 5), (4, 2)),          # four corners + centre
+}
+SUPPORTED_PLAYER_COUNTS: tuple[int, ...] = tuple(sorted(_SPAWN_LAYOUTS))
 
 # Base probability weights for non-spawn zone types
 _BASE_W: dict[str, float] = {
@@ -184,26 +194,34 @@ def _shannon_entropy(w: dict[str, float]) -> float:
 
 def assign_zones(
     rng: random.Random,
-    spawn_teams: tuple[str, str] = DEFAULT_SPAWN_TEAMS,
+    spawn_teams: tuple[str, ...] = DEFAULT_SPAWN_TEAMS,
 ) -> dict[tuple[int, int], str]:
     """
     Wave Function Collapse zone assignment.
 
     Collapse order:
-      1. Both spawn zones are pre-collapsed and seed the frontier.
+      1. All spawn zones are pre-collapsed and seed the frontier.
       2. Each iteration collapses the frontier cell with the smallest
          (spawn_distance, shannon_entropy) score — nearest to a spawn first,
          ties broken by lowest entropy (most constrained).
       3. The newly collapsed cell's uncollapsed neighbours join the frontier.
       4. Any cell not yet reachable is added as a fallback to avoid stalling.
     """
+    n = len(spawn_teams)
+    if n not in _SPAWN_LAYOUTS:
+        raise ValueError(
+            f"unsupported team count {n}; supported: {SUPPORTED_PLAYER_COUNTS}"
+        )
     if any(t not in TEAM_COLORS for t in spawn_teams):
         raise ValueError(f"unknown team in {spawn_teams}; valid: {TEAM_COLORS}")
+    if len(set(spawn_teams)) != n:
+        raise ValueError(f"duplicate teams in {spawn_teams}")
+
     all_cells = [(zc, zr) for zr in range(ZONE_ROWS) for zc in range(ZONE_COLS)]
 
+    layout = _SPAWN_LAYOUTS[n]
     collapsed: dict[tuple[int, int], str] = {
-        (0, 0):                         f"start_{spawn_teams[0]}",
-        (ZONE_COLS - 1, ZONE_ROWS - 1): f"start_{spawn_teams[1]}",
+        cell: f"start_{team}" for cell, team in zip(layout, spawn_teams)
     }
 
     spawn_cells = set(collapsed.keys())
@@ -472,14 +490,19 @@ def render_preview(
 # Entry point
 # ---------------------------------------------------------------------------
 
-def _parse_teams_arg(arg: str) -> tuple[str, str]:
-    parts = [t.strip() for t in arg.split(",")]
-    if len(parts) != 2:
-        raise SystemExit(f"--teams expects exactly 2 comma-separated colors (got {arg!r})")
+def _parse_teams_arg(arg: str) -> tuple[str, ...]:
+    parts = tuple(t.strip() for t in arg.split(","))
+    if len(parts) not in _SPAWN_LAYOUTS:
+        raise SystemExit(
+            f"--teams expects {SUPPORTED_PLAYER_COUNTS} comma-separated colors "
+            f"(got {len(parts)}: {arg!r})"
+        )
+    if len(set(parts)) != len(parts):
+        raise SystemExit(f"--teams has duplicate colors: {arg!r}")
     for t in parts:
         if t not in TEAM_COLORS:
             raise SystemExit(f"unknown team {t!r}; valid: {', '.join(TEAM_COLORS)}")
-    return (parts[0], parts[1])
+    return parts
 
 
 def main():
@@ -488,7 +511,8 @@ def main():
     parser.add_argument("stem", nargs="?", default="map_editor/maps/map_001")
     parser.add_argument("seed", nargs="?", type=int, default=None)
     parser.add_argument("--teams", default=",".join(DEFAULT_SPAWN_TEAMS),
-                        help=f"two comma-separated team colors (any of {','.join(TEAM_COLORS)})")
+                        help=f"{SUPPORTED_PLAYER_COUNTS} comma-separated team colors "
+                             f"(any of {','.join(TEAM_COLORS)})")
     args = parser.parse_args()
 
     stem = args.stem

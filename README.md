@@ -23,24 +23,44 @@ If you'd rather keep the zip elsewhere, point `ASSETS_ZIP` at it (e.g. `ASSETS_Z
 ```bash
 pip install -r requirements.txt
 
-# Single-player (server runs in solo mode against an AI opponent)
-python server_main.py --solo
+# Single-player vs AI
+python server_main.py --players blue=human,black=ai
 python client_main.py
 
-# Multiplayer — host
+# Multiplayer 1v1 — host (default)
 python server_main.py
 
 # Multiplayer — join
 python client_main.py
 ```
 
-### Picking team colors
+### Setting up a match
 
-Five team colors ship with the asset pack: **blue**, **red**, **yellow**, **purple**, **black**. The default match is blue vs. black; pass `--teams` to either generator to pick a different pairing:
+Use `--players` to describe every seat in the match. Each token is `team=role`,
+where `team` is one of **blue**, **red**, **yellow**, **purple**, **black**, and
+`role` is `human` or `ai`. Two to five seats are supported, all colors must be
+distinct.
 
 ```bash
-python server_main.py --solo --teams red,yellow
+# 1 human vs 3 AI
+python server_main.py --players blue=human,red=ai,yellow=ai,purple=ai
+
+# 2v2v1 free-for-all (5 humans)
+python server_main.py --players blue=human,red=human,yellow=human,purple=human,black=human
+
+# Watch 5 AIs duke it out
+python server_main.py --players blue=ai,red=ai,yellow=ai,purple=ai,black=ai
+```
+
+The server waits for every `human` seat to connect (in the order listed) before
+starting; AI seats fill in automatically. Default with no flag is
+`blue=human,black=human` (multiplayer 1v1).
+
+`map_editor/create_map.py` accepts the same colors via `--teams`:
+
+```bash
 python map_editor/create_map.py --teams purple,blue
+python map_editor/create_map.py --teams blue,red,yellow,purple,black
 ```
 
 <img width="2228" height="1189" alt="screenshot-2026-04-28T06:14:03+08:00" src="https://github.com/user-attachments/assets/fafabe20-796f-4e74-8640-d7ef3ca37e99" />

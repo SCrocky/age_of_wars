@@ -162,9 +162,14 @@ class GameServer:
                 print(f"[server] {team} reconnected — resuming")
                 return
         print(f"[server] {team} did not reconnect — forfeiting")
-        others = [t for t in self.game.teams if t != team]
-        winner = others[0] if len(others) == 1 else None
-        await self._broadcast({"type": "GAME_OVER", "winner": winner})
+        # Destroy the team's Castles so _check_victory eliminates them. With
+        # N>2 the remaining teams keep playing until exactly one survives.
+        for b in self.game.buildings:
+            if b.team == team and isinstance(b, Castle):
+                b.hp = -1
+        self._disconnected.discard(team)
+        if not self._disconnected:
+            self._paused = False
 
     # ------------------------------------------------------------------
     # Pending garrison resolution
