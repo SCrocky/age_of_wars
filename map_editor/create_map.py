@@ -47,6 +47,12 @@ import random
 import sys
 from math import log
 
+# Allow `from entities.teams import …` when run as a script
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from entities.teams import TEAM_COLORS, BANNER_COLORS  # noqa: E402
+
+DEFAULT_SPAWN_TEAMS: tuple[str, str] = ("blue", "black")
+
 # ---------------------------------------------------------------------------
 # Map dimensions
 # ---------------------------------------------------------------------------
@@ -159,7 +165,7 @@ def _weights_for(cell: tuple[int, int],
         if nb not in collapsed:
             continue
         ntype = collapsed[nb]
-        if ntype in ("start_blue", "start_black"):
+        if ntype.startswith("start_"):
             w["forest"] *= _SPAWN_BOOST
             w["gold"]   *= _SPAWN_BOOST
             w["meat"]   *= _SPAWN_BOOST
@@ -176,7 +182,10 @@ def _shannon_entropy(w: dict[str, float]) -> float:
     return -sum((v / total) * log(v / total) for v in w.values() if v > 0)
 
 
-def assign_zones(rng: random.Random) -> dict[tuple[int, int], str]:
+def assign_zones(
+    rng: random.Random,
+    spawn_teams: tuple[str, str] = DEFAULT_SPAWN_TEAMS,
+) -> dict[tuple[int, int], str]:
     """
     Wave Function Collapse zone assignment.
 
@@ -188,11 +197,13 @@ def assign_zones(rng: random.Random) -> dict[tuple[int, int], str]:
       3. The newly collapsed cell's uncollapsed neighbours join the frontier.
       4. Any cell not yet reachable is added as a fallback to avoid stalling.
     """
+    if any(t not in TEAM_COLORS for t in spawn_teams):
+        raise ValueError(f"unknown team in {spawn_teams}; valid: {TEAM_COLORS}")
     all_cells = [(zc, zr) for zr in range(ZONE_ROWS) for zc in range(ZONE_COLS)]
 
     collapsed: dict[tuple[int, int], str] = {
-        (0, 0):                         "start_blue",
-        (ZONE_COLS - 1, ZONE_ROWS - 1): "start_black",
+        (0, 0):                         f"start_{spawn_teams[0]}",
+        (ZONE_COLS - 1, ZONE_ROWS - 1): f"start_{spawn_teams[1]}",
     }
 
     spawn_cells = set(collapsed.keys())
@@ -317,13 +328,10 @@ def place_resources(
             _place_clump(res_type, cx, cy, count, spread, variant_fn)
 
     for (zc, zr), ztype in zones.items():
-        if ztype == "start_blue":
+        if ztype.startswith("start_"):
+            team = ztype[len("start_"):]
             cx, cy = zone_world_center(zc, zr)
-            spawns.append({"team": "blue",  "x": round(cx, 1), "y": round(cy, 1)})
-
-        elif ztype == "start_black":
-            cx, cy = zone_world_center(zc, zr)
-            spawns.append({"team": "black", "x": round(cx, 1), "y": round(cy, 1)})
+            spawns.append({"team": team, "x": round(cx, 1), "y": round(cy, 1)})
 
         elif ztype == "forest":
             fill_forest_zone(zc, zr, lambda: rng.randint(0, 3))
@@ -378,13 +386,11 @@ def build_output(
 # Preview renderer
 # ---------------------------------------------------------------------------
 
-_ZONE_TINT = {
-    "start_blue":  (80,  120, 220, 140),
-    "start_black": (40,  40,  70,  140),
-    "forest":      (30,  110, 30,  120),
-    "gold":        (210, 175, 30,  120),
-    "meat":        (220, 190, 160, 120),
-    "empty":       (106, 153, 56,  60),
+_ZONE_TINT_NON_SPAWN = {
+    "forest": (30,  110, 30,  120),
+    "gold":   (210, 175, 30,  120),
+    "meat":   (220, 190, 160, 120),
+    "empty":  (106, 153, 56,  60),
 }
 
 _RES_COLOR = {
@@ -393,10 +399,15 @@ _RES_COLOR = {
     "meat": (220, 220, 220),
 }
 
-_SPAWN_COLOR = {
-    "blue":  (80,  120, 220),
-    "black": (30,  30,  60),
-}
+_SPAWN_COLOR = dict(BANNER_COLORS)
+
+
+def _zone_tint(ztype: str) -> tuple[int, int, int, int]:
+    if ztype.startswith("start_"):
+        team = ztype[len("start_"):]
+        r, g, b = BANNER_COLORS.get(team, (200, 200, 200))
+        return (r, g, b, 140)
+    return _ZONE_TINT_NON_SPAWN.get(ztype, (106, 153, 56, 80))
 
 
 def render_preview(
@@ -429,7 +440,7 @@ def render_preview(
         col0, row0, col1, row1 = zone_tile_bounds(zc, zr)
         zw = (col1 - col0) * SCALE
         zh = (row1 - row0) * SCALE
-        tint = _ZONE_TINT.get(ztype, (106, 153, 56, 80))
+        tint = _zone_tint(ztype)
         overlay = pygame.Surface((zw, zh), pygame.SRCALPHA)
         overlay.fill(tint)
         canvas.blit(overlay, (col0 * SCALE, row0 * SCALE))
@@ -461,9 +472,28 @@ def render_preview(
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _parse_teams_arg(arg: str) -> tuple[str, str]:
+    parts = [t.strip() for t in arg.split(",")]
+    if len(parts) != 2:
+        raise SystemExit(f"--teams expects exactly 2 comma-separated colors (got {arg!r})")
+    for t in parts:
+        if t not in TEAM_COLORS:
+            raise SystemExit(f"unknown team {t!r}; valid: {', '.join(TEAM_COLORS)}")
+    return (parts[0], parts[1])
+
+
 def main():
-    stem = sys.argv[1] if len(sys.argv) > 1 else "map_editor/maps/map_001"
-    seed = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    import argparse
+    parser = argparse.ArgumentParser(description="Procedurally generate a map")
+    parser.add_argument("stem", nargs="?", default="map_editor/maps/map_001")
+    parser.add_argument("seed", nargs="?", type=int, default=None)
+    parser.add_argument("--teams", default=",".join(DEFAULT_SPAWN_TEAMS),
+                        help=f"two comma-separated team colors (any of {','.join(TEAM_COLORS)})")
+    args = parser.parse_args()
+
+    stem = args.stem
+    seed = args.seed
+    spawn_teams = _parse_teams_arg(args.teams)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if not os.path.isabs(stem):
@@ -473,10 +503,10 @@ def main():
     actual_seed = seed if seed is not None else random.randrange(2**32)
     rng = random.Random(actual_seed)
 
-    print(f"Generating {ROWS}×{COLS} map  seed={actual_seed} …")
+    print(f"Generating {ROWS}×{COLS} map  seed={actual_seed}  teams={spawn_teams} …")
 
     grid               = make_grid()
-    zones              = assign_zones(rng)
+    zones              = assign_zones(rng, spawn_teams)
     resources, spawns  = place_resources(rng, zones, grid)
     data               = build_output(grid, zones, resources, spawns, actual_seed)
 

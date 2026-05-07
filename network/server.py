@@ -162,8 +162,9 @@ class GameServer:
                 print(f"[server] {team} reconnected — resuming")
                 return
         print(f"[server] {team} did not reconnect — forfeiting")
-        other = "black" if team == "blue" else "blue"
-        await self._broadcast({"type": "GAME_OVER", "winner": other})
+        others = [t for t in self.game.teams if t != team]
+        winner = others[0] if len(others) == 1 else None
+        await self._broadcast({"type": "GAME_OVER", "winner": winner})
 
     # ------------------------------------------------------------------
     # Pending garrison resolution
@@ -355,10 +356,11 @@ class GameServer:
     # ------------------------------------------------------------------
 
     def _check_victory(self) -> str | None:
-        blue_alive  = any(b for b in self.game.buildings if b.team == "blue"  and isinstance(b, Castle) and b.alive)
-        black_alive = any(b for b in self.game.buildings if b.team == "black" and isinstance(b, Castle) and b.alive)
-        if not blue_alive:
-            return "black"
-        if not black_alive:
-            return "blue"
+        survivors = [
+            t for t in self.game.teams
+            if any(b.team == t and isinstance(b, Castle) and b.alive
+                   for b in self.game.buildings)
+        ]
+        if len(survivors) == 1 and len(self.game.teams) > 1:
+            return survivors[0]
         return None

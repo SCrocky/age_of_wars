@@ -44,6 +44,10 @@ import math
 import os
 import sys
 
+# Allow `from entities.teams import …` when run as a script
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from entities.teams import BANNER_COLORS  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Placement constants
 # ---------------------------------------------------------------------------
@@ -135,13 +139,11 @@ def build_scene(map_data: dict, buildings: list[dict], units: list[dict],
 # Preview renderer
 # ---------------------------------------------------------------------------
 
-_ZONE_TINT = {
-    "start_blue":  (80,  120, 220, 140),
-    "start_black": (40,  40,  70,  140),
-    "forest":      (30,  110, 30,  120),
-    "gold":        (210, 175, 30,  120),
-    "meat":        (220, 190, 160, 120),
-    "empty":       (106, 153, 56,  60),
+_ZONE_TINT_NON_SPAWN = {
+    "forest": (30,  110, 30,  120),
+    "gold":   (210, 175, 30,  120),
+    "meat":   (220, 190, 160, 120),
+    "empty":  (106, 153, 56,  60),
 }
 
 _RES_COLOR = {
@@ -150,10 +152,15 @@ _RES_COLOR = {
     "meat": (220, 220, 220),
 }
 
-_TEAM_COLOR = {
-    "blue":  (80,  130, 230),
-    "black": (30,  30,  60),
-}
+_TEAM_COLOR = dict(BANNER_COLORS)
+
+
+def _zone_tint(ztype: str) -> tuple[int, int, int, int]:
+    if ztype.startswith("start_"):
+        team = ztype[len("start_"):]
+        r, g, b = BANNER_COLORS.get(team, (200, 200, 200))
+        return (r, g, b, 140)
+    return _ZONE_TINT_NON_SPAWN.get(ztype, (106, 153, 56, 60))
 
 # Castle display size in world px (from building.py)
 _CASTLE_W = 320
@@ -187,7 +194,7 @@ def render_preview(scene: dict, out_path: str):
     for zone in scene["zones"]:
         c0, r0, c1, r1 = zone["col0"], zone["row0"], zone["col1"], zone["row1"]
         zw, zh = (c1 - c0) * SCALE, (r1 - r0) * SCALE
-        tint = _ZONE_TINT.get(zone["type"], (106, 153, 56, 60))
+        tint = _zone_tint(zone["type"])
         overlay = pygame.Surface((zw, zh), pygame.SRCALPHA)
         overlay.fill(tint)
         canvas.blit(overlay, (c0 * SCALE, r0 * SCALE))

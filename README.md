@@ -34,6 +34,15 @@ python server_main.py
 python client_main.py
 ```
 
+### Picking team colors
+
+Five team colors ship with the asset pack: **blue**, **red**, **yellow**, **purple**, **black**. The default match is blue vs. black; pass `--teams` to either generator to pick a different pairing:
+
+```bash
+python server_main.py --solo --teams red,yellow
+python map_editor/create_map.py --teams purple,blue
+```
+
 <img width="2228" height="1189" alt="screenshot-2026-04-28T06:14:03+08:00" src="https://github.com/user-attachments/assets/fafabe20-796f-4e74-8640-d7ef3ca37e99" />
 
 

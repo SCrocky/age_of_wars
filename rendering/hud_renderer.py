@@ -12,27 +12,27 @@ import pygame
 from pygame._sdl2.video import Renderer
 import assets
 import texture_cache
+from entities.teams import AVATAR_ROW_OFFSET
 
 _UI = "assets/UI Elements/UI Elements"
 
-_AVATAR_IDX: dict[tuple[str, str], int] = {
-    ("Warrior",  "blue"):  1,
-    ("Lancer",   "blue"):  2,
-    ("Archer",   "blue"):  3,
-    ("Pawn",     "blue"):  5,
-    ("Castle",   "blue"):  5,
-    ("Archery",  "blue"):  3,
-    ("Barracks", "blue"):  1,
-    ("Tower",    "blue"):  3,   # archer avatar — tower is an archer platform
-    ("Warrior",  "black"): 21,
-    ("Lancer",   "black"): 22,
-    ("Archer",   "black"): 23,
-    ("Pawn",     "black"): 25,
-    ("Castle",   "black"): 25,
-    ("Archery",  "black"): 23,
-    ("Barracks", "black"): 21,
-    ("Tower",    "black"): 23,
+# Column index (1..5) into a team's avatar row; combined with the team's row
+# offset to pick the Avatars_NN.png. Tower uses the archer portrait.
+_AVATAR_COL: dict[str, int] = {
+    "Warrior":  1,
+    "Lancer":   2,
+    "Archer":   3,
+    "Pawn":     5,
+    "Castle":   5,
+    "Archery":  3,
+    "Barracks": 1,
+    "Tower":    3,
 }
+
+
+def _avatar_idx(unit_type: str, team: str) -> int:
+    col = _AVATAR_COL.get(unit_type, 4)
+    return AVATAR_ROW_OFFSET.get(team, 0) + col
 
 PAWN_COST     = {"meat": 20}
 ARCHER_COST   = {"wood": 15, "meat": 30}
@@ -57,9 +57,10 @@ class HUD:
     PAD     = 8
     ICON_SZ = 28
 
-    def __init__(self, sw: int, sh: int):
+    def __init__(self, sw: int, sh: int, player_team: str):
         self.sw = sw
         self.sh = sh
+        self.player_team = player_team
         self._font    = pygame.font.SysFont(None, 22)
         self._font_md = pygame.font.SysFont(None, 26)
         self._avatars: dict[int, pygame.Surface] = {}
@@ -108,12 +109,13 @@ class HUD:
         self._btn_pressed = pygame.transform.scale(btn_prs_raw, (BUTTON_SIZE, BUTTON_SIZE))
 
         _fit = BUTTON_SIZE - 8
+        team_dir = f"assets/Buildings/{self.player_team.capitalize()} Buildings"
         raw_build = {
-            "Archery":   assets.load_image("assets/Buildings/Blue Buildings/Archery.png"),
-            "Barracks":  assets.load_image("assets/Buildings/Blue Buildings/Barracks.png"),
-            "House":     assets.load_image("assets/Buildings/Blue Buildings/House1.png"),
-            "Tower":     assets.load_image("assets/Buildings/Blue Buildings/Tower.png"),
-            "Monastery": assets.load_image("assets/Buildings/Blue Buildings/Monastery.png"),
+            "Archery":   assets.load_image(f"{team_dir}/Archery.png"),
+            "Barracks":  assets.load_image(f"{team_dir}/Barracks.png"),
+            "House":     assets.load_image(f"{team_dir}/House1.png"),
+            "Tower":     assets.load_image(f"{team_dir}/Tower.png"),
+            "Monastery": assets.load_image(f"{team_dir}/Monastery.png"),
         }
         self._build_icons: dict[str, pygame.Surface] = {
             k: self._scale_to_fit(v, _fit) for k, v in raw_build.items()
@@ -311,7 +313,7 @@ class HUD:
         btn_col_w = (n_btns * BUTTON_SIZE + (n_btns - 1) * pad + pad * 2) if n_btns else 0
 
         av_size = ph - c - pad * 3
-        av_idx  = _AVATAR_IDX.get((type(ent).__name__, ent.team), 4)
+        av_idx  = _avatar_idx(type(ent).__name__, ent.team)
         ax, ay  = px + c + pad, py + c
         texture_cache.get_texture(self._get_avatar(av_idx)).draw(
             dstrect=(ax, ay, av_size, av_size)
@@ -337,7 +339,7 @@ class HUD:
             start_x = px + pw - c - pad - total_w
             by      = py + (ph - BUTTON_SIZE) // 2
             for i, (unit_key, costs, action) in enumerate(prod):
-                av_idx2 = _AVATAR_IDX.get((unit_key, ent.team), 4)
+                av_idx2 = _avatar_idx(unit_key, ent.team)
                 bx      = start_x + i * (BUTTON_SIZE + pad)
                 rect    = pygame.Rect(bx, by, BUTTON_SIZE, BUTTON_SIZE)
                 if action == "release_archer":
@@ -358,7 +360,7 @@ class HUD:
         av_size  = ph - c - pad * 3
         max_show = max(1, (pw - c * 2 - pad) // (av_size + pad))
         for i, ent in enumerate(selected[:max_show]):
-            av_idx = _AVATAR_IDX.get((type(ent).__name__, ent.team), 4)
+            av_idx = _avatar_idx(type(ent).__name__, ent.team)
             ax     = px + c + pad + i * (av_size + pad)
             ay     = py + c
             texture_cache.get_texture(self._get_avatar(av_idx)).draw(

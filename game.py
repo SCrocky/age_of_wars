@@ -11,6 +11,7 @@ from entities.building import Building, Castle, Archery, Barracks, House, Tower,
 from entities.resource import GoldNode, WoodNode, MeatNode
 from entities.projectile import Arrow
 from entities.blueprint import Blueprint
+from entities.teams import teams_from_scene
 
 _BUILDING_CLS = {
     "Castle":    Castle,
@@ -37,10 +38,8 @@ class Game:
         self.blueprints: list[Blueprint] = []
         self.resources:  list            = []
 
-        self.economy: dict[str, dict[str, int]] = {
-            "blue":  {"gold": 60, "wood": 600, "meat": 60, "pop": 0, "pop_cap": 0},
-            "black": {"gold": 60, "wood": 60, "meat": 60, "pop": 0, "pop_cap": 0},
-        }
+        self.teams: list[str] = []
+        self.economy: dict[str, dict[str, int]] = {}
 
         self._next_entity_id: int = 1
         self._load_scene(scene_path)
@@ -59,6 +58,12 @@ class Game:
             scene = json.load(f)
 
         self.map = TileMap.from_data(scene["cols"], scene["rows"], scene["tiles"])
+
+        self.teams = teams_from_scene(scene)
+        self.economy = {
+            t: {"gold": 60, "wood": 60, "meat": 60, "pop": 0, "pop_cap": 0}
+            for t in self.teams
+        }
 
         for b_data in scene.get("buildings", []):
             cls = _BUILDING_CLS.get(b_data["type"])
@@ -96,7 +101,7 @@ class Game:
     # ------------------------------------------------------------------
 
     def _recalc_pop(self):
-        for team in ("blue", "black"):
+        for team in self.teams:
             eco = self.economy[team]
             eco["pop"] = sum(1 for u in self.units + self.pawns if u.team == team)
             eco["pop_cap"] = sum(

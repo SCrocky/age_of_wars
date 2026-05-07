@@ -13,7 +13,7 @@ import os
 import sys
 
 
-def _generate_scene() -> str:
+def _generate_scene(spawn_teams: tuple[str, str] | None = None) -> str:
     """Generate a fresh map and return the path to the scene JSON."""
     import json
     import random
@@ -29,8 +29,9 @@ def _generate_scene() -> str:
     seed  = random.randrange(2 ** 32)
     rng   = random.Random(seed)
 
+    teams = spawn_teams or _cm.DEFAULT_SPAWN_TEAMS
     grid              = _cm.make_grid()
-    zones             = _cm.assign_zones(rng)
+    zones             = _cm.assign_zones(rng, teams)
     resources, spawns = _cm.place_resources(rng, zones, grid)
     map_data          = _cm.build_output(grid, zones, resources, spawns, seed)
     buildings, units  = _pm.populate(map_data)
@@ -58,12 +59,17 @@ async def main_solo(scene_path: str, host: str, port: int):
     from network.lobby import wait_for_one_player
     from network.server import GameServer
     from network.ai_player import AIPlayer
+    from entities.teams import teams_from_scene
 
     with open(scene_path) as f:
         scene = json.load(f)
 
-    human  = await wait_for_one_player(host, port, scene_path)
-    ai     = AIPlayer("black", scene)
+    human    = await wait_for_one_player(host, port, scene_path)
+    teams    = teams_from_scene(scene)
+    ai_team  = next((t for t in teams if t != human[2]), None)
+    if ai_team is None:
+        raise RuntimeError("Solo mode requires a scene with at least 2 spawn teams")
+    ai      = AIPlayer(ai_team, scene)
     ai_task = asyncio.create_task(ai.run())
 
     server  = GameServer(scene_path)
@@ -81,13 +87,22 @@ if __name__ == "__main__":
     parser.add_argument("--host",  default="0.0.0.0")
     parser.add_argument("--port",  default=9876, type=int)
     parser.add_argument("--solo",  action="store_true",
-                        help="Single-player mode: AI controls the black team")
+                        help="Single-player mode: AI controls the second team in the scene")
+    parser.add_argument("--teams", default=None,
+                        help="Two comma-separated team colors when generating a scene "
+                             "(any of blue,red,yellow,purple,black). Default: blue,black")
     args = parser.parse_args()
 
     scene = args.scene
     if scene is None:
         print("[server] Generating map…")
-        scene = _generate_scene()
+        spawn_teams = None
+        if args.teams:
+            parts = [t.strip() for t in args.teams.split(",")]
+            if len(parts) != 2:
+                parser.error("--teams expects exactly 2 comma-separated colors")
+            spawn_teams = (parts[0], parts[1])
+        scene = _generate_scene(spawn_teams)
         print(f"[server] Scene: {scene}")
 
     if args.solo:

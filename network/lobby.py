@@ -9,8 +9,7 @@ import struct
 
 import msgpack
 
-
-TEAMS = ["blue", "black"]
+from entities.teams import teams_from_scene
 
 
 async def wait_for_players(host: str, port: int, scene_path: str):
@@ -22,17 +21,19 @@ async def wait_for_players(host: str, port: int, scene_path: str):
     ready = asyncio.Event()
 
     with open(scene_path) as f:
-        scene_json = json.dumps(json.load(f)).encode()
+        scene_data = json.load(f)
+    teams      = teams_from_scene(scene_data)
+    scene_json = json.dumps(scene_data).encode()
 
     async def _handle(reader, writer):
         idx = len(players)
-        if idx >= 2:
+        if idx >= len(teams):
             writer.close()
             return
-        team = TEAMS[idx]
+        team = teams[idx]
         players.append((reader, writer, team))
         print(f"[lobby] Player {idx + 1} connected → team={team}")
-        if len(players) == 2:
+        if len(players) == len(teams):
             ready.set()
 
     server = await asyncio.start_server(_handle, host, port)
@@ -61,22 +62,26 @@ async def wait_for_players(host: str, port: int, scene_path: str):
 
 async def wait_for_one_player(host: str, port: int, scene_path: str):
     """
-    Solo mode: wait for a single human player (assigned 'blue') and return
-    their (reader, writer, team) tuple. The AI takes the remaining team.
+    Solo mode: wait for a single human player (assigned to the scene's first
+    spawn team) and return their (reader, writer, team) tuple. The AI takes
+    the remaining team.
     """
     player = None
     ready  = asyncio.Event()
 
     with open(scene_path) as f:
-        scene_json = json.dumps(json.load(f)).encode()
+        scene_data = json.load(f)
+    teams       = teams_from_scene(scene_data)
+    human_team  = teams[0]
+    scene_json  = json.dumps(scene_data).encode()
 
     async def _handle(reader, writer):
         nonlocal player
         if player is not None:
             writer.close()
             return
-        player = (reader, writer, "blue")
-        print("[lobby] Human player connected → team=blue")
+        player = (reader, writer, human_team)
+        print(f"[lobby] Human player connected → team={human_team}")
         ready.set()
 
     server = await asyncio.start_server(_handle, host, port)

@@ -24,6 +24,7 @@ import rendering.entity_renderer as entity_renderer
 import texture_cache
 from network.render_proxy import EntityProxy, make_proxy
 from systems.fog import FogOfWar
+from entities.teams import BANNER_COLORS, teams_from_scene
 
 
 DRAG_THRESHOLD = 5
@@ -45,7 +46,7 @@ class ClientGame:
         self._camera_on_castle = False
 
         self._map_renderer = MapRenderer()
-        self.hud           = HUD(viewport.window_w, viewport.window_h)
+        self.hud           = HUD(viewport.window_w, viewport.window_h, player_team)
         self.minimap       = Minimap(viewport.window_w, viewport.window_h)
 
         self._proxies: dict[int, EntityProxy] = {}
@@ -65,8 +66,8 @@ class ClientGame:
         self._t_curr:      float = 0.0
 
         self.economy: dict = {
-            "blue":  {"gold": 0, "wood": 0, "meat": 0, "pop": 0, "pop_cap": 0},
-            "black": {"gold": 0, "wood": 0, "meat": 0, "pop": 0, "pop_cap": 0},
+            t: {"gold": 0, "wood": 0, "meat": 0, "pop": 0, "pop_cap": 0}
+            for t in teams_from_scene(scene)
         }
 
         self._cmd_queue: queue.Queue = queue.Queue()
@@ -608,7 +609,7 @@ class ClientGame:
             self._fog_visible,
         )
 
-        col = (80, 140, 255) if self.player_team == "blue" else (60, 60, 60)
+        col = BANNER_COLORS.get(self.player_team, (200, 200, 200))
         txt_surf = self._font_team.render(f"You: {self.player_team}", True, col)
         txt_tex  = texture_cache.make_texture(txt_surf)
         tw, th   = txt_surf.get_size()
