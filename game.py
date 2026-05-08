@@ -293,7 +293,7 @@ class Game:
             )
 
     def update(self, dt: float):
-        _combatants = [e for e in self.units + self.buildings if getattr(e, "alive", True)]
+        _combatants = [e for e in self.units + self.pawns + self.buildings if getattr(e, "alive", True)]
         _enemy_pool: dict[str, list] = {}
         _ally_pool:  dict[str, list] = {}
         for unit in self.units:
