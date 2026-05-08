@@ -63,7 +63,7 @@ class Game:
         for b in self.buildings:
             if not b.alive:
                 continue
-            entry = {"type": type(b).__name__, "x": b.x, "y": b.y,
+            entry = {"id": b.entity_id, "type": type(b).__name__, "x": b.x, "y": b.y,
                      "team": b.team, "hp": b.hp}
             if isinstance(b, House):
                 entry["variant"] = int(b.sprite_key.split("/")[1][-1])
@@ -76,7 +76,7 @@ class Game:
             if not bp.alive:
                 continue
             b = bp._building
-            entry = {"type": type(b).__name__, "x": b.x, "y": b.y,
+            entry = {"id": bp.entity_id, "type": type(b).__name__, "x": b.x, "y": b.y,
                      "team": b.team, "progress": bp.progress}
             if isinstance(b, House):
                 entry["variant"] = int(b.sprite_key.split("/")[1][-1])
@@ -84,17 +84,31 @@ class Game:
 
         units_out = []
         for u in self.units:
-            if u.alive:
-                units_out.append({"type": type(u).__name__, "x": u.x, "y": u.y,
-                                   "team": u.team, "hp": u.hp})
+            if not u.alive:
+                continue
+            entry = {"id": u.entity_id, "type": type(u).__name__, "x": u.x, "y": u.y,
+                     "team": u.team, "hp": u.hp}
+            if u.attack_target is not None and getattr(u.attack_target, "alive", False):
+                entry["attack_target_id"] = u.attack_target.entity_id
+            units_out.append(entry)
         for p in self.pawns:
-            if p.alive:
-                units_out.append({"type": "Pawn", "x": p.x, "y": p.y,
-                                   "team": p.team, "hp": p.hp})
+            if not p.alive:
+                continue
+            entry = {"id": p.entity_id, "type": "Pawn", "x": p.x, "y": p.y,
+                     "team": p.team, "hp": p.hp,
+                     "task": p._task.value,
+                     "resource_type": p._resource_type,
+                     "carried": p._carried}
+            if p._resource_node is not None:
+                entry["resource_node_id"] = p._resource_node.entity_id
+            if p._blueprint is not None:
+                entry["blueprint_id"] = p._blueprint.entity_id
+            units_out.append(entry)
 
         resources_out = []
         for r in self.resources:
-            entry = {"type": r.resource_type, "x": r.x, "y": r.y, "amount": r.amount}
+            entry = {"id": r.entity_id, "type": r.resource_type, "x": r.x, "y": r.y,
+                     "amount": r.amount}
             if hasattr(r, "sprite_key"):
                 n = int(r.sprite_key.split("/")[2])
                 # Invert constructor formulas to recover original variant arg:
@@ -146,6 +160,9 @@ class Game:
                         if k in saved:
                             self.economy[team][k] = saved[k]
 
+        # Maps saved entity_id → newly created entity for cross-reference resolution.
+        _saved_id_map: dict[int, object] = {}
+
         for b_data in scene.get("buildings", []):
             cls = _BUILDING_CLS.get(b_data["type"])
             if cls is None:
@@ -163,6 +180,8 @@ class Game:
                 archer = self._assign_id(Archer(building.x, building.y, team=building.team))
                 archer.hp = archer_data.get("hp", archer.max_hp)
                 building.garrison(archer)
+            if "id" in b_data:
+                _saved_id_map[b_data["id"]] = building
             self.buildings.append(building)
 
         for bp_data in scene.get("blueprints", []):
@@ -176,7 +195,13 @@ class Game:
             self.map.clear_area(b.x, b.y, tile_radius=4)
             bp = self._assign_id(Blueprint(b))
             bp.progress = float(bp_data.get("progress", 0.0))
+            if "id" in bp_data:
+                _saved_id_map[bp_data["id"]] = bp
             self.blueprints.append(bp)
+
+        # Collect (entity, data) pairs for cross-reference resolution after all entities loaded.
+        _unit_data_pairs: list[tuple] = []
+        _pawn_data_pairs: list[tuple] = []
 
         for u_data in scene.get("units", []):
             x, y, team = u_data["x"], u_data["y"], u_data["team"]
@@ -184,6 +209,9 @@ class Game:
                 p = self._assign_id(Pawn(x, y, team=team))
                 if "hp" in u_data:
                     p.hp = u_data["hp"]
+                if "id" in u_data:
+                    _saved_id_map[u_data["id"]] = p
+                _pawn_data_pairs.append((p, u_data))
                 self.pawns.append(p)
             else:
                 cls = _UNIT_CLS.get(u_data["type"])
@@ -191,6 +219,9 @@ class Game:
                     u = self._assign_id(cls(x, y, team=team))
                     if "hp" in u_data:
                         u.hp = u_data["hp"]
+                    if "id" in u_data:
+                        _saved_id_map[u_data["id"]] = u
+                    _unit_data_pairs.append((u, u_data))
                     self.units.append(u)
 
         for r_data in scene.get("resources", []):
@@ -206,7 +237,46 @@ class Game:
                 continue
             if "amount" in r_data:
                 node.amount = r_data["amount"]
+            if "id" in r_data:
+                _saved_id_map[r_data["id"]] = node
             self.resources.append(node)
+
+        # --- Second pass: resolve cross-references ---
+
+        from entities.pawn import Task as PawnTask
+        _valid_task_values = {t.value for t in PawnTask}
+
+        for p, p_data in _pawn_data_pairs:
+            task_str = p_data.get("task", "idle")
+            task = PawnTask(task_str) if task_str in _valid_task_values else PawnTask.IDLE
+            p._task          = task
+            p._resource_type = p_data.get("resource_type", "")
+            p._carried       = float(p_data.get("carried", 0.0))
+            p._buildings     = tuple(self.buildings)
+
+            if task in (PawnTask.TO_RESOURCE, PawnTask.GATHER, PawnTask.TO_DEPOT):
+                p._resource_pool = self.resources
+                node = _saved_id_map.get(p_data.get("resource_node_id"))
+                if node is not None and not node.depleted:
+                    p._resource_node = node
+                elif task != PawnTask.TO_DEPOT:
+                    # No valid node; pawn will idle (TO_DEPOT can proceed without a node)
+                    p._task = PawnTask.IDLE
+
+            if task in (PawnTask.TO_BUILD, PawnTask.BUILD):
+                p._blueprint_pool = self.blueprints
+                bp = _saved_id_map.get(p_data.get("blueprint_id"))
+                if bp is not None and bp.alive:
+                    p._blueprint = bp
+                else:
+                    p._task = PawnTask.IDLE
+
+        for u, u_data in _unit_data_pairs:
+            target_id = u_data.get("attack_target_id")
+            if target_id is not None:
+                target = _saved_id_map.get(target_id)
+                if target is not None and getattr(target, "alive", False):
+                    u.attack_target = target
 
     # ------------------------------------------------------------------
     # Update
