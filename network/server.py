@@ -11,6 +11,7 @@ big-endian unsigned integer giving the payload length.
 
 import asyncio
 import math
+import os
 import struct
 import time
 
@@ -46,12 +47,16 @@ RECONNECT_TIMEOUT = 30.0  # seconds to wait for reconnect before forfeiting
 class GameServer:
     def __init__(self, scene_path: str):
         self.game = Game(scene_path)
+        self._scene_path = scene_path
         self._tick: int = 0
         self._command_queue: asyncio.Queue = asyncio.Queue()
         self._writers: dict[str, asyncio.StreamWriter] = {}
         self._disconnected: set[str] = set()
         self._paused: bool = False
+        self._manually_paused: bool = False
+        self._save_pending: str | None = None
         self._pending_garrisons: dict[int, object] = {}  # archer entity_id → Tower
+        self._last_save_file: str | None = None
 
     async def run(self, players: list):
         """
@@ -84,15 +89,25 @@ class GameServer:
                 await asyncio.sleep(sleep)
             next_tick_time += dt
 
-            if self._paused:
-                await asyncio.sleep(dt)
-                next_tick_time = time.monotonic()  # don't pile up ticks while paused
-                continue
-
-            # Drain all pending commands before this tick
+            # Always drain commands so pause/save/unpause work while paused too.
             while not self._command_queue.empty():
                 cmd, player_team = self._command_queue.get_nowait()
                 self._apply_command(cmd, player_team)
+
+            if self._paused:
+                next_tick_time = time.monotonic()  # don't pile up ticks while paused
+                self._tick += 1
+                if self._tick % _TICKS_PER_SNAP == 0:
+                    await self._broadcast_snapshot()
+                    # Execute a pending save after one paused snapshot so clients
+                    # see the overlay before the (potentially slow) file write.
+                    if self._save_pending:
+                        self.game.save(self._save_pending)
+                        self._last_save_file = os.path.basename(self._save_pending)
+                        self._save_pending = None
+                        if not self._manually_paused:
+                            self._paused = False
+                continue
 
             self.game.update(dt)
             self._resolve_pending_garrisons()
@@ -110,8 +125,11 @@ class GameServer:
     # ------------------------------------------------------------------
 
     async def _broadcast_snapshot(self):
-        data = serialize_snapshot(self.game, self._tick)
+        data = serialize_snapshot(self.game, self._tick, paused=self._paused)
         await self._send_all(data)
+        if self._last_save_file:
+            await self._broadcast({"type": "SAVE_OK", "file": self._last_save_file})
+            self._last_save_file = None
 
     async def _broadcast(self, obj: dict):
         import msgpack
@@ -168,7 +186,7 @@ class GameServer:
             if b.team == team and isinstance(b, Castle):
                 b.hp = -1
         self._disconnected.discard(team)
-        if not self._disconnected:
+        if not self._disconnected and not self._manually_paused:
             self._paused = False
 
     # ------------------------------------------------------------------
@@ -287,6 +305,18 @@ class GameServer:
             archer = tower.release_archer()
             if archer is not None:
                 self.game.units.append(archer)
+
+        elif kind == "CMD_PAUSE":
+            self._manually_paused = not self._manually_paused
+            self._paused = self._manually_paused or bool(self._disconnected)
+
+        elif kind == "CMD_SAVE":
+            from datetime import datetime
+            saves_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                     "savefiles")
+            ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self._save_pending = os.path.join(saves_dir, f"save_{ts}.json")
+            self._paused = True
 
         elif kind == "CMD_DEV_SPAWN":
             wx = cmd.get("world_x", 0.0)

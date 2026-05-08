@@ -82,6 +82,9 @@ class ClientGame:
         self.fog = FogOfWar(self.map.rows, self.map.cols)
 
         self._winner: str | None = None
+        self._paused: bool = False
+        self._saving: bool = False
+        self._save_toast: tuple[str, float] | None = None  # (filename, seconds_remaining)
 
         self._connected: bool = True
         self._rtt_ms: float | None = None
@@ -98,6 +101,7 @@ class ClientGame:
     def apply_message(self, msg: dict):
         msg_type = msg.get("type")
         if msg_type == "GAME_STATE":
+            self._paused = msg.get("paused", False)
             self._apply_snapshot(msg)
         elif msg_type == "GAME_OVER":
             self._winner = msg.get("winner", "")
@@ -107,6 +111,9 @@ class ClientGame:
             self._connected = True
         elif msg_type == "PONG":
             self._rtt_ms = (time.monotonic() - msg.get("client_time", 0)) * 1000
+        elif msg_type == "SAVE_OK":
+            self._saving = False
+            self._save_toast = (msg.get("file", "saved"), 3.0)
 
     def _apply_snapshot(self, snap: dict):
         now = time.monotonic()
@@ -220,6 +227,11 @@ class ClientGame:
                 self.debug = not self.debug
             elif event.key == pygame.K_F3:
                 self._show_debug = not self._show_debug
+            elif event.key == pygame.K_p:
+                self._cmd_queue.put({"type": "CMD_PAUSE"})
+            elif event.key == pygame.K_s and (event.mod & pygame.KMOD_CTRL):
+                self._saving = True
+                self._cmd_queue.put({"type": "CMD_SAVE"})
             elif event.key == pygame.K_s:
                 lx, ly = self.viewport.to_logical(*self._current_mouse_pos)
                 wx, wy = self.camera.screen_to_world(lx, ly)
@@ -323,6 +335,11 @@ class ClientGame:
         friendly = [e for e in self._units + self._pawns + self._buildings
                     if e.team == self.player_team]
         self.fog.update(friendly, TILE_SIZE)
+
+        if self._save_toast is not None:
+            text, timer = self._save_toast
+            timer -= dt
+            self._save_toast = (text, timer) if timer > 0 else None
 
     # ------------------------------------------------------------------
     # Click handlers
@@ -623,6 +640,26 @@ class ClientGame:
             rtt_tex  = texture_cache.make_texture(rtt_surf)
             tw, th   = rtt_surf.get_size()
             rtt_tex.draw(dstrect=(win_w - tw - 10, 30, tw, th))
+
+        if self._paused:
+            renderer.draw_blend_mode = pygame.BLENDMODE_BLEND
+            renderer.draw_color = (80, 80, 80, 120)
+            renderer.fill_rect(pygame.Rect(0, 0, win_w, win_h))
+            renderer.draw_blend_mode = pygame.BLENDMODE_NONE
+            label = "Saving…" if self._saving else "Paused"
+            surf = self._font_hint.render(label, True, (220, 220, 220))
+            tex  = texture_cache.make_texture(surf)
+            tw, th = surf.get_size()
+            tex.draw(dstrect=(win_w // 2 - tw // 2, win_h // 2 - th // 2, tw, th))
+
+        if self._save_toast is not None:
+            text, timer = self._save_toast
+            surf = self._font_hint.render(f"Saved: {text}", True, (100, 255, 100))
+            tex  = texture_cache.make_texture(surf)
+            tex.alpha = 255 if timer > 1.0 else int(timer * 255)
+            tw, th = surf.get_size()
+            tex.draw(dstrect=(win_w // 2 - tw // 2, 90, tw, th))
+            tex.alpha = 255
 
         if self._winner:
             self._draw_winner()

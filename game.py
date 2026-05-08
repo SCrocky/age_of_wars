@@ -53,6 +53,81 @@ class Game:
         self._next_entity_id += 1
         return entity
 
+    def save(self, path: str) -> None:
+        """Serialize current game state to a JSON save file."""
+        import json, os
+        from datetime import datetime, timezone
+        from entities.building import House, Tower
+
+        buildings_out = []
+        for b in self.buildings:
+            if not b.alive:
+                continue
+            entry = {"type": type(b).__name__, "x": b.x, "y": b.y,
+                     "team": b.team, "hp": b.hp}
+            if isinstance(b, House):
+                entry["variant"] = int(b.sprite_key.split("/")[1][-1])
+            if isinstance(b, Tower) and b.garrisoned_archer is not None:
+                entry["garrisoned_archer"] = {"hp": b.garrisoned_archer.hp}
+            buildings_out.append(entry)
+
+        blueprints_out = []
+        for bp in self.blueprints:
+            if not bp.alive:
+                continue
+            b = bp._building
+            entry = {"type": type(b).__name__, "x": b.x, "y": b.y,
+                     "team": b.team, "progress": bp.progress}
+            if isinstance(b, House):
+                entry["variant"] = int(b.sprite_key.split("/")[1][-1])
+            blueprints_out.append(entry)
+
+        units_out = []
+        for u in self.units:
+            if u.alive:
+                units_out.append({"type": type(u).__name__, "x": u.x, "y": u.y,
+                                   "team": u.team, "hp": u.hp})
+        for p in self.pawns:
+            if p.alive:
+                units_out.append({"type": "Pawn", "x": p.x, "y": p.y,
+                                   "team": p.team, "hp": p.hp})
+
+        resources_out = []
+        for r in self.resources:
+            entry = {"type": r.resource_type, "x": r.x, "y": r.y, "amount": r.amount}
+            if hasattr(r, "sprite_key"):
+                n = int(r.sprite_key.split("/")[2])
+                # Invert constructor formulas to recover original variant arg:
+                #   WoodNode: n = (variant % 4) + 1  →  variant = n - 1
+                #   GoldNode: n = max(1, min(6, variant))  →  variant = n
+                entry["variant"] = n - 1 if r.resource_type == "wood" else n
+            else:
+                entry["variant"] = 0
+            resources_out.append(entry)
+
+        teams = list(self.economy.keys())
+        data = {
+            "save_version": 1,
+            "timestamp":    datetime.now(timezone.utc).isoformat(),
+            "rows":         self.map.rows,
+            "cols":         self.map.cols,
+            "tile_px":      TILE_SIZE,
+            "tileset":      "Tilemap_color1",
+            "tiles":        self.map.tiles,
+            # Stub spawns so teams_from_scene() and server seat-validation keep working.
+            "spawns":       [{"team": t, "x": 0.0, "y": 0.0} for t in teams],
+            "economy":      {t: dict(eco) for t, eco in self.economy.items()},
+            "buildings":    buildings_out,
+            "blueprints":   blueprints_out,
+            "units":        units_out,
+            "resources":    resources_out,
+        }
+
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(data, f, separators=(",", ":"))
+        print(f"[game] saved → {path}")
+
     def _load_scene(self, path: str):
         with open(path) as f:
             scene = json.load(f)
@@ -64,6 +139,12 @@ class Game:
             t: {"gold": 60, "wood": 60, "meat": 60, "pop": 0, "pop_cap": 0}
             for t in self.teams
         }
+        if "economy" in scene:
+            for team, saved in scene["economy"].items():
+                if team in self.economy:
+                    for k in ("gold", "wood", "meat"):
+                        if k in saved:
+                            self.economy[team][k] = saved[k]
 
         for b_data in scene.get("buildings", []):
             cls = _BUILDING_CLS.get(b_data["type"])
@@ -75,26 +156,57 @@ class Game:
             building = self._assign_id(cls(b_data["x"], b_data["y"], team=b_data["team"], **kw))
             self.map.clear_area(building.x, building.y, tile_radius=4)
             building.on_place(self.map)
+            if "hp" in b_data:
+                building.hp = b_data["hp"]
+            if isinstance(building, Tower) and "garrisoned_archer" in b_data:
+                archer_data = b_data["garrisoned_archer"]
+                archer = self._assign_id(Archer(building.x, building.y, team=building.team))
+                archer.hp = archer_data.get("hp", archer.max_hp)
+                building.garrison(archer)
             self.buildings.append(building)
+
+        for bp_data in scene.get("blueprints", []):
+            cls = _BUILDING_CLS.get(bp_data["type"])
+            if cls is None:
+                continue
+            kw = {}
+            if bp_data["type"] == "House":
+                kw["variant"] = bp_data.get("variant", 1)
+            b = cls(bp_data["x"], bp_data["y"], team=bp_data["team"], **kw)
+            self.map.clear_area(b.x, b.y, tile_radius=4)
+            bp = self._assign_id(Blueprint(b))
+            bp.progress = float(bp_data.get("progress", 0.0))
+            self.blueprints.append(bp)
 
         for u_data in scene.get("units", []):
             x, y, team = u_data["x"], u_data["y"], u_data["team"]
             if u_data["type"] == "Pawn":
-                self.pawns.append(self._assign_id(Pawn(x, y, team=team)))
+                p = self._assign_id(Pawn(x, y, team=team))
+                if "hp" in u_data:
+                    p.hp = u_data["hp"]
+                self.pawns.append(p)
             else:
                 cls = _UNIT_CLS.get(u_data["type"])
                 if cls:
-                    self.units.append(self._assign_id(cls(x, y, team=team)))
+                    u = self._assign_id(cls(x, y, team=team))
+                    if "hp" in u_data:
+                        u.hp = u_data["hp"]
+                    self.units.append(u)
 
         for r_data in scene.get("resources", []):
             x, y, variant = r_data["x"], r_data["y"], r_data.get("variant", 0)
             rtype = r_data["type"]
             if rtype == "wood":
-                self.resources.append(self._assign_id(WoodNode(x, y, variant=variant)))
+                node = self._assign_id(WoodNode(x, y, variant=variant))
             elif rtype == "gold":
-                self.resources.append(self._assign_id(GoldNode(x, y, variant=variant)))
+                node = self._assign_id(GoldNode(x, y, variant=variant))
             elif rtype == "meat":
-                self.resources.append(self._assign_id(MeatNode(x, y)))
+                node = self._assign_id(MeatNode(x, y))
+            else:
+                continue
+            if "amount" in r_data:
+                node.amount = r_data["amount"]
+            self.resources.append(node)
 
     # ------------------------------------------------------------------
     # Update
@@ -151,6 +263,7 @@ class Game:
 
         self._apply_separation(dt)
         self._apply_building_collision()
+        self._apply_tree_collision()
 
         next_buildings  = []
         next_blueprints = []
@@ -189,6 +302,25 @@ class Game:
                         unit.x += ox * (1 if dx >= 0 else -1)
                     else:
                         unit.y += oy * (1 if dy >= 0 else -1)
+
+    def _apply_tree_collision(self):
+        from entities.pawn import Task as PawnTask
+        for unit in self.units + self.pawns:
+            if getattr(unit, "_task", None) is PawnTask.GATHER:
+                continue
+            unit_r = unit.DISPLAY_SIZE / 4
+            for res in self.resources:
+                if not isinstance(res, WoodNode) or res.depleted:
+                    continue
+                combined_r = unit_r + WoodNode.COLLISION_RADIUS
+                dx = unit.x - res.x
+                dy = unit.y - (res.y + WoodNode.COLLISION_Y_OFFSET)
+                dist_sq = dx * dx + dy * dy
+                if 0 < dist_sq < combined_r * combined_r:
+                    dist = math.sqrt(dist_sq)
+                    overlap = combined_r - dist
+                    unit.x += dx / dist * overlap
+                    unit.y += dy / dist * overlap
 
     def _apply_separation(self, dt: float):
         RADIUS        = 52.0

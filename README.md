@@ -105,7 +105,21 @@ Collect **gold**, **wood**, and **meat** to build up your base and train troops.
 | Arrow keys | Pan camera |
 | Mouse wheel | Zoom |
 | H | Centre camera on your Castle |
+| P | Pause / unpause |
+| Ctrl + S | Save game |
 | ESC | Cancel pending action |
+
+### Saving and loading
+
+Press **Ctrl + S** to save at any time. The game pauses automatically while the file is written, then resumes. Save files are stored as JSON in the `savefiles/` folder at the repo root, named by timestamp (`save_YYYYMMDD_HHMMSS.json`).
+
+To load a save, pass it as `--scene` when starting the server:
+
+```bash
+python server_main.py --players blue=human,black=ai --scene savefiles/save_20260508_120000.json
+```
+
+The `--players` teams must match the teams recorded in the save file.
 
 ---
 

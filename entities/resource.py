@@ -71,10 +71,12 @@ class GoldNode(ResourceNode):
 
 
 class WoodNode(ResourceNode):
-    resource_type = "wood"
-    max_amount    = 250
-    DISPLAY_SIZE  = 112
-    ANIM_FPS      = 5
+    resource_type    = "wood"
+    max_amount       = 250
+    DISPLAY_SIZE     = 112
+    COLLISION_RADIUS   = 18   # trunk collision radius in world px
+    COLLISION_Y_OFFSET = 28   # shift collision center down toward the trunk
+    ANIM_FPS         = 5
 
     def __init__(self, x: float, y: float, variant: int = 0):
         super().__init__(x, y)

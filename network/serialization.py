@@ -154,7 +154,7 @@ def _serialize_entity(entity) -> dict:
     return base
 
 
-def serialize_snapshot(game, tick: int) -> bytes:
+def serialize_snapshot(game, tick: int, paused: bool = False) -> bytes:
     entities = []
     for lst in (game.buildings, game.blueprints, game.units, game.pawns,
                 game.arrows, game.resources):
@@ -164,6 +164,7 @@ def serialize_snapshot(game, tick: int) -> bytes:
     snapshot = {
         "type":     "GAME_STATE",
         "tick":     tick,
+        "paused":   paused,
         "economy":  game.economy,
         "entities": entities,
     }
