@@ -45,26 +45,28 @@ class CombatUnit(Unit):
         if early is not None:
             return early
 
+        # Drop dead targets first, then immediately retarget so the
+        # attack/chase block below acts on the replacement this same tick.
+        if self.attack_target is not None and not self.attack_target.alive:
+            self.attack_target = self.search_nearby_for(
+                self._enemy_pool,
+                lambda e: e.alive and e.team != self.team,
+                NEARBY_ENEMY_RADIUS,
+            )
+
         spawned = []
         if self.attack_target is not None:
-            if not self.attack_target.alive:
-                self.attack_target = self.search_nearby_for(
-                    self._enemy_pool,
-                    lambda e: e.alive and e.team != self.team,
-                    NEARBY_ENEMY_RADIUS,
-                )
+            if self._dist_to_target() <= self.attack_range:
+                self.path = []
+                self._state = "attack"
+                self._on_enter_attack()
+                result = self._tick_attack(dt)
+                if result is not None:
+                    spawned.append(result)
             else:
-                if self._dist_to_target() <= self.attack_range:
-                    self.path = []
-                    self._state = "attack"
-                    self._on_enter_attack()
-                    result = self._tick_attack(dt)
-                    if result is not None:
-                        spawned.append(result)
-                else:
-                    self._state        = "run"
-                    self._action_timer = 0.0
-                    self._chase(dt, tile_map)
+                self._state        = "run"
+                self._action_timer = 0.0
+                self._chase(dt, tile_map)
         elif self._approach_target is not None:
             self._state = "run"
             self._step_approach(dt)
