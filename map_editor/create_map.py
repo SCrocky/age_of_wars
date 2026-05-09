@@ -1,14 +1,18 @@
 """
 Map creation script — Age of Wars
-Generates a procedurally zoned 150×250 tile map saved as JSON + PNG preview.
+Generates a procedurally zoned tile map saved as JSON + PNG preview.
+
+The map boundary is a flat-top hexagon (pointing left/right) stretched to the
+16:9 tile grid, implemented by masking corner tiles as water. Three map sizes
+are available; zone layout and spawn positions scale with the grid.
 
 Zone layout
 -----------
 The interior is divided into a ZONE_COLS × ZONE_ROWS grid.
-Two diagonally-opposite corner zones become player starting areas.
+Spawn zones are placed at six hex vertex positions; N are used for N players.
 
 Zone types are assigned with a Wave Function Collapse (WFC) algorithm:
-  - Collapse starts from both spawn zones and propagates outward.
+  - Collapse starts from spawn zones and propagates outward.
   - At each step the uncollapsed frontier cell nearest to a spawn (Manhattan
     distance) and with the lowest Shannon entropy is collapsed first.
   - Adjacency rules shape each cell's weight distribution before sampling:
@@ -22,6 +26,7 @@ Zone types are assigned with a Wave Function Collapse (WFC) algorithm:
 Output JSON schema
 ------------------
 {
+  "size": str,
   "rows": int, "cols": int, "tile_px": int, "tileset": str,
   "seed": int | null,
   "zone_cols": int, "zone_rows": int,
@@ -34,10 +39,11 @@ Output JSON schema
 
 Usage
 -----
-    python map_editor/create_map.py [output_stem] [seed]
+    python map_editor/create_map.py [output_stem] [seed] [--size small|medium|large]
 
     output_stem defaults to "map_editor/maps/map_001"
     seed        optional integer for reproducible generation
+    --size      map size: small, medium, or large (default: large)
 """
 
 import json
@@ -54,31 +60,34 @@ from entities.teams import TEAM_COLORS, BANNER_COLORS  # noqa: E402
 DEFAULT_SPAWN_TEAMS: tuple[str, ...] = ("blue", "black")
 
 # ---------------------------------------------------------------------------
-# Map dimensions
+# Map sizes  (rows, cols, zone_cols, zone_rows)
 # ---------------------------------------------------------------------------
-ROWS         = 150
-COLS         = 250
+MAP_SIZES: dict[str, tuple[int, int, int, int]] = {
+    "small":  ( 128, 128,  8, 4),
+    "medium": (192, 192, 10, 6),
+    "large":  (256, 256, 12, 8),
+}
+DEFAULT_SIZE = "large"
+
+# Hex corner-cut fraction: 0 = rectangle, higher = more pronounced hex shape.
+# 0.15 produces a mild bevel that keeps ~70% of the top/bottom edge intact.
+HEX_CUT_FRAC = 0.15
+
+# ---------------------------------------------------------------------------
+# Active map dimensions — updated by _configure_size() before generation
+# ---------------------------------------------------------------------------
+ROWS         = MAP_SIZES[DEFAULT_SIZE][0]
+COLS         = MAP_SIZES[DEFAULT_SIZE][1]
 TILE_PX      = 64        # world pixels per tile
 WATER_BORDER = 3         # water-tile border thickness
+
+ZONE_COLS = MAP_SIZES[DEFAULT_SIZE][2]
+ZONE_ROWS = MAP_SIZES[DEFAULT_SIZE][3]
 
 WATER = 0
 GRASS = 1
 
-# ---------------------------------------------------------------------------
-# Zone layout
-# ---------------------------------------------------------------------------
-ZONE_COLS = 10
-ZONE_ROWS = 6
-
-# Fixed (zc, zr) spawn cells per player count. Cells are chosen on the 10×6
-# zone grid to keep starts roughly equidistant for FFA matches.
-_SPAWN_LAYOUTS: dict[int, tuple[tuple[int, int], ...]] = {
-    2: ((0, 0), (9, 5)),                                  # opposite corners
-    3: ((4, 0), (0, 5), (9, 5)),                          # top + two bottom
-    4: ((0, 0), (9, 0), (0, 5), (9, 5)),                  # four corners
-    5: ((0, 0), (9, 0), (0, 5), (9, 5), (4, 2)),          # four corners + centre
-}
-SUPPORTED_PLAYER_COUNTS: tuple[int, ...] = tuple(sorted(_SPAWN_LAYOUTS))
+SUPPORTED_PLAYER_COUNTS: tuple[int, ...] = (2, 3, 4, 5)
 
 # Base probability weights for non-spawn zone types
 _BASE_W: dict[str, float] = {
@@ -96,9 +105,6 @@ _SAME_PENALTY  = 0.12   # same-type weight ×       when a neighbour is identica
 
 # ---------------------------------------------------------------------------
 # Resource placement parameters keyed by resource type
-#   clumps  – (min, max) number of clumps to place
-#   size    – (min, max) resources per clump
-#   spread  – max radius (world px) of a clump
 # ---------------------------------------------------------------------------
 _PARAMS = {
     "wood": dict(clumps=(4, 7), size=(3, 5), spread=200),
@@ -106,9 +112,48 @@ _PARAMS = {
     "meat": dict(clumps=(2, 4), size=(2, 5), spread=160),
 }
 
-MIN_RES_DIST       = 80.0   # minimum world-px gap between any two resources
-MIN_RES_DIST_WOOD  = 30.0   # trees can crowd much closer together
-ZONE_MARGIN   = 128    # world-px inset from zone edges before placing resources
+MIN_RES_DIST      = 80.0   # minimum world-px gap between any two resources
+MIN_RES_DIST_WOOD = 30.0   # trees can crowd much closer together
+ZONE_MARGIN       = 128    # world-px inset from zone edges before placing resources
+
+
+# ---------------------------------------------------------------------------
+# Size configuration
+# ---------------------------------------------------------------------------
+
+def _configure_size(size: str) -> None:
+    global ROWS, COLS, ZONE_COLS, ZONE_ROWS
+    ROWS, COLS, ZONE_COLS, ZONE_ROWS = MAP_SIZES[size]
+
+
+def _spawn_layouts() -> dict[int, tuple[tuple[int, int], ...]]:
+    """
+    Compute spawn zone positions for the current zone grid.
+
+    Six positions correspond to the hex vertices (UL, UR, L, R, LL, LR).
+    `margin` zones are inset from the horizontal edges so spawns land clearly
+    inside the playable area rather than in cut-off water corners.
+
+    Player configs:
+      2 → UL + LR  (diagonally opposite, max distance)
+      3 → UL, R, LL  (alternating hex vertices, roughly equidistant)
+      4 → UL, UR, LL, LR  (four diagonal corners)
+      5 → UL, UR, R, LR, LL  (all six minus L)
+    """
+    margin = round(ZONE_COLS * HEX_CUT_FRAC)
+    zc, zr = ZONE_COLS, ZONE_ROWS
+    ul = (margin,          0)
+    ur = (zc - 1 - margin, 0)
+    l  = (0,               zr // 2 - 1)
+    r  = (zc - 1,          zr // 2 - 1)
+    ll = (margin,          zr - 1)
+    lr = (zc - 1 - margin, zr - 1)
+    return {
+        2: (ul, lr),
+        3: (ul, r, ll),
+        4: (ul, ur, ll, lr),
+        5: (ul, ur, r, lr, ll),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -142,15 +187,38 @@ def zone_world_center(zc: int, zr: int) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 def make_grid() -> list[list[int]]:
-    """All-grass interior with a water border."""
+    """
+    All-grass interior with a water border and hex corner cuts.
+
+    Hex mask: a tile (c, r) is water if any of the four diagonal half-plane
+    conditions fails. The conditions encode a flat-top hexagon stretched to the
+    COLS×ROWS grid with cut depth HEX_CUT_FRAC.
+
+      inside hex iff:
+        c·Hh + r·Wf  ≥ threshold   (upper-left diagonal OK)
+        (W-c)·Hh + r·Wf  ≥ threshold   (upper-right diagonal OK)
+        c·Hh + (H-r)·Wf  ≥ threshold   (lower-left diagonal OK)
+        (W-c)·Hh + (H-r)·Wf  ≥ threshold   (lower-right diagonal OK)
+
+    where Hh = ROWS/2, Wf = COLS·HEX_CUT_FRAC, threshold = Wf·Hh.
+    """
+    Hh = ROWS / 2
+    Wf = COLS * HEX_CUT_FRAC
+    threshold = Wf * Hh
     grid = []
     for r in range(ROWS):
-        row = []
+        row_tiles = []
         for c in range(COLS):
-            is_border = (r < WATER_BORDER or r >= ROWS - WATER_BORDER or
-                         c < WATER_BORDER or c >= COLS - WATER_BORDER)
-            row.append(WATER if is_border else GRASS)
-        grid.append(row)
+            border = (r < WATER_BORDER or r >= ROWS - WATER_BORDER or
+                      c < WATER_BORDER or c >= COLS - WATER_BORDER)
+            in_hex = (
+                c * Hh + r * Wf >= threshold and
+                (COLS - c) * Hh + r * Wf >= threshold and
+                c * Hh + (ROWS - r) * Wf >= threshold and
+                (COLS - c) * Hh + (ROWS - r) * Wf >= threshold
+            )
+            row_tiles.append(WATER if border or not in_hex else GRASS)
+        grid.append(row_tiles)
     return grid
 
 
@@ -208,7 +276,8 @@ def assign_zones(
       4. Any cell not yet reachable is added as a fallback to avoid stalling.
     """
     n = len(spawn_teams)
-    if n not in _SPAWN_LAYOUTS:
+    layouts = _spawn_layouts()
+    if n not in layouts:
         raise ValueError(
             f"unsupported team count {n}; supported: {SUPPORTED_PLAYER_COUNTS}"
         )
@@ -219,7 +288,7 @@ def assign_zones(
 
     all_cells = [(zc, zr) for zr in range(ZONE_ROWS) for zc in range(ZONE_COLS)]
 
-    layout = _SPAWN_LAYOUTS[n]
+    layout = layouts[n]
     collapsed: dict[tuple[int, int], str] = {
         cell: f"start_{team}" for cell, team in zip(layout, spawn_teams)
     }
@@ -375,6 +444,7 @@ def build_output(
     resources: list[dict],
     spawns: list[dict],
     seed,
+    size: str = DEFAULT_SIZE,
 ) -> dict:
     zone_list = []
     for (zc, zr), ztype in sorted(zones.items()):
@@ -386,6 +456,7 @@ def build_output(
             "type": ztype,
         })
     return {
+        "size":      size,
         "rows":      ROWS,
         "cols":      COLS,
         "tile_px":   TILE_PX,
@@ -449,8 +520,6 @@ def render_preview(
     for r in range(ROWS):
         for c in range(COLS):
             color = (56, 120, 153) if grid[r][c] == WATER else (106, 153, 56)
-            canvas.set_at((c * SCALE, r * SCALE), color)
-            # fill the SCALE×SCALE block
             pygame.draw.rect(canvas, color, (c * SCALE, r * SCALE, SCALE, SCALE))
 
     # --- zone tints + borders ---
@@ -492,7 +561,7 @@ def render_preview(
 
 def _parse_teams_arg(arg: str) -> tuple[str, ...]:
     parts = tuple(t.strip() for t in arg.split(","))
-    if len(parts) not in _SPAWN_LAYOUTS:
+    if len(parts) not in SUPPORTED_PLAYER_COUNTS:
         raise SystemExit(
             f"--teams expects {SUPPORTED_PLAYER_COUNTS} comma-separated colors "
             f"(got {len(parts)}: {arg!r})"
@@ -510,10 +579,14 @@ def main():
     parser = argparse.ArgumentParser(description="Procedurally generate a map")
     parser.add_argument("stem", nargs="?", default="map_editor/maps/map_001")
     parser.add_argument("seed", nargs="?", type=int, default=None)
+    parser.add_argument("--size", default=DEFAULT_SIZE, choices=MAP_SIZES,
+                        help="Map size (default: %(default)s)")
     parser.add_argument("--teams", default=",".join(DEFAULT_SPAWN_TEAMS),
                         help=f"{SUPPORTED_PLAYER_COUNTS} comma-separated team colors "
                              f"(any of {','.join(TEAM_COLORS)})")
     args = parser.parse_args()
+
+    _configure_size(args.size)
 
     stem = args.stem
     seed = args.seed
@@ -527,12 +600,12 @@ def main():
     actual_seed = seed if seed is not None else random.randrange(2**32)
     rng = random.Random(actual_seed)
 
-    print(f"Generating {ROWS}×{COLS} map  seed={actual_seed}  teams={spawn_teams} …")
+    print(f"Generating {ROWS}×{COLS} {args.size} map  seed={actual_seed}  teams={spawn_teams} …")
 
     grid               = make_grid()
     zones              = assign_zones(rng, spawn_teams)
     resources, spawns  = place_resources(rng, zones, grid)
-    data               = build_output(grid, zones, resources, spawns, actual_seed)
+    data               = build_output(grid, zones, resources, spawns, actual_seed, args.size)
 
     json_path = stem + ".json"
     with open(json_path, "w") as f:

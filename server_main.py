@@ -55,7 +55,7 @@ def _parse_players_arg(arg: str) -> list[tuple[str, str]]:
     return seats
 
 
-def _generate_scene(spawn_teams: tuple[str, ...]) -> str:
+def _generate_scene(spawn_teams: tuple[str, ...], size: str = "large") -> str:
     """Generate a fresh map and return the path to the scene JSON."""
     import json
     import random
@@ -63,6 +63,8 @@ def _generate_scene(spawn_teams: tuple[str, ...]) -> str:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "map_editor"))
     import create_map as _cm
     import populate_map as _pm
+
+    _cm._configure_size(size)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     maps_dir = os.path.join(os.path.dirname(__file__), "map_editor", "maps")
@@ -74,7 +76,7 @@ def _generate_scene(spawn_teams: tuple[str, ...]) -> str:
     grid              = _cm.make_grid()
     zones             = _cm.assign_zones(rng, spawn_teams)
     resources, spawns = _cm.place_resources(rng, zones, grid)
-    map_data          = _cm.build_output(grid, zones, resources, spawns, seed)
+    map_data          = _cm.build_output(grid, zones, resources, spawns, seed, size)
     buildings, units  = _pm.populate(map_data)
     scene             = _pm.build_scene(map_data, buildings, units, stem)
 
@@ -137,6 +139,8 @@ async def main(scene_path: str, host: str, port: int,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Age of Wars server")
     parser.add_argument("--scene", default=None, help="Path to scene JSON")
+    parser.add_argument("--size",  default="large", choices=["small", "medium", "large"],
+                        help="Map size when generating a fresh map (default: large)")
     parser.add_argument("--host",  default="0.0.0.0")
     parser.add_argument("--port",  default=9876, type=int)
     parser.add_argument(
@@ -152,8 +156,8 @@ if __name__ == "__main__":
 
     scene = args.scene
     if scene is None:
-        print(f"[server] Generating map for teams: {teams}…")
-        scene = _generate_scene(teams)
+        print(f"[server] Generating {args.size} map for teams: {teams}…")
+        scene = _generate_scene(teams, args.size)
         print(f"[server] Scene: {scene}")
     else:
         _validate_scene_matches_seats(scene, seats)
