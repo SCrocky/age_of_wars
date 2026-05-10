@@ -214,6 +214,8 @@ class ClientGame:
 
     def handle_event(self, event: pygame.event.Event):
         if self._winner:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
             return
 
         if event.type in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):

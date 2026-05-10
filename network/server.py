@@ -72,7 +72,12 @@ class GameServer:
         ]
         loop_task = asyncio.create_task(self._game_loop())
 
-        await asyncio.gather(loop_task, *client_tasks)
+        try:
+            await loop_task
+        finally:
+            for task in client_tasks:
+                task.cancel()
+            await asyncio.gather(*client_tasks, return_exceptions=True)
 
     # ------------------------------------------------------------------
     # Game loop
