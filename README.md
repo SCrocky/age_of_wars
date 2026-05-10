@@ -107,6 +107,8 @@ Collect **gold**, **wood**, and **meat** to build up your base and train troops.
 | H | Centre camera on your Castle |
 | P | Pause / unpause |
 | Ctrl + S | Save game |
+| Ctrl + 1–9 | Assign selected units to control group |
+| 1–9 | Select control group and centre camera on it |
 | ESC | Cancel pending action |
 
 ### Saving and loading

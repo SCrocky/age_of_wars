@@ -81,6 +81,8 @@ class ClientGame:
 
         self.fog = FogOfWar(self.map.rows, self.map.cols)
 
+        self._control_groups: dict[int, list[int]] = {}
+
         self._winner: str | None = None
         self._paused: bool = False
         self._saving: bool = False
@@ -249,6 +251,28 @@ class ClientGame:
                 if castle is not None:
                     self.camera.x = castle.x - self.w / 2 / self.camera.zoom
                     self.camera.y = castle.y - self.h / 2 / self.camera.zoom
+            elif pygame.K_1 <= event.key <= pygame.K_9:
+                group = event.key - pygame.K_0
+                if event.mod & pygame.KMOD_CTRL:
+                    sel = [e for e in self._units + self._pawns
+                           if e.team == self.player_team and e.selected]
+                    self._control_groups[group] = [e.entity_id for e in sel]
+                else:
+                    ids = self._control_groups.get(group)
+                    if ids:
+                        id_set = set(ids)
+                        all_mine = self._my_entities()
+                        for e in all_mine:
+                            e.selected = False
+                        matched = [e for e in self._units + self._pawns
+                                   if e.team == self.player_team and e.entity_id in id_set]
+                        for e in matched:
+                            e.selected = True
+                        if matched:
+                            cx = sum(e.x for e in matched) / len(matched)
+                            cy = sum(e.y for e in matched) / len(matched)
+                            self.camera.x = cx - self.w / 2 / self.camera.zoom
+                            self.camera.y = cy - self.h / 2 / self.camera.zoom
 
         elif event.type == pygame.MOUSEWHEEL:
             lx, ly = self.viewport.to_logical(*self._current_mouse_pos)
